@@ -6,6 +6,7 @@ from ctypes import Structure, c_long, windll, pointer
 
 u = windll.user32
 WM_SETTEXT = 0x000C
+WM_CLOSE = 0x0010
 BM_CLICK = 0x00F5
 
 
@@ -28,26 +29,36 @@ def shot(hwnd):
 
 def find_window(cls, parent=None):
     'Finds window or window control.'
-    return u.FindWindowExW(parent, None, 'ThunderRT6' + cls, None)
+    return u.FindWindowExW(parent, None, cls, None)
 
 
 def query(train):
     'Queries information of the specified train number.'
 
+    base = 'ThunderRT6'
     while True:
-        hwnd = find_window('FormDC')
+        hwnd = find_window(base + 'FormDC')
         if hwnd:
             break
         time.sleep(5)
 
-    htext, hbutton = map(
-        lambda x: find_window(x, hwnd),
-        ('TextBox', 'CommandButton')
+    htext, hbutton = (
+        find_window(base + x, hwnd)
+        for x in ['TextBox', 'CommandButton']
     )
 
     u.SetForegroundWindow(hwnd)
     u.SendMessageW(htext, WM_SETTEXT, None, train)
-    u.SendMessageW(hbutton, BM_CLICK, None, None)
+    u.PostMessageW(hbutton, BM_CLICK, None, None)
+    time.sleep(0.5)
+
+    # close possible message box
+    hmsg = find_window('#32770', None)
+    if hmsg:
+        u.SendMessageW(hmsg, WM_CLOSE, None, None)
+        time.sleep(0.1)
+        raise LookupError
+
     return shot(hwnd)
 
 

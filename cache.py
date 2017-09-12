@@ -15,9 +15,10 @@ def load():
 def main(src):
     codes = set()
     for day, trains in load().items():
-        for train in trains['G'] + trains['D']:
-            code = train['station_train_code'].partition('(')[0]
-            codes.add(code)
+        for type in 'DGC':
+            for train in trains[type]:
+                code = train['station_train_code'].partition('(')[0]
+                codes.add(code)
     for code in codes:
         try:
             im = query(code).convert('1', dither=False)

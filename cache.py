@@ -2,6 +2,7 @@
 
 import time
 import json
+import os.path
 from shot import query
 
 
@@ -13,6 +14,9 @@ def load():
 
 
 def main(src):
+    if not os.path.exists(src):
+        os.mkdir(src)
+
     codes = set()
     for day, trains in load().items():
         for type in 'DGC':

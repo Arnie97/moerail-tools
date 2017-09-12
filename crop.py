@@ -5,6 +5,9 @@ from PIL import Image
 
 
 def crop(src, dest):
+    if not os.path.exists(dest):
+        os.mkdir(dest)
+
     empty = Image.open('empty.png')
     mask = Image.open('mask.png')
 

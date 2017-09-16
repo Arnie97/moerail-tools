@@ -2,7 +2,7 @@
 
 from io import BytesIO
 from flask import send_file, Flask
-from shot import query
+from shot import Automation
 
 app = Flask(__name__)
 
@@ -10,8 +10,8 @@ app = Flask(__name__)
 @app.route('/<train>')
 def image_route_handler(train):
     'Responds HTTP requests.'
-    img = query(train)
-    img = img.convert('1', dither=0)
+    me.query(train)
+    img = me.get_shot()
     return serve_image(img)
 
 
@@ -24,4 +24,5 @@ def serve_image(img):
 
 
 if __name__ == '__main__':
+    me = Automation()
     app.run(host='0.0.0.0')

@@ -1,18 +1,9 @@
 #!/usr/bin/env python3
 
 import time
+import PIL.Image
 import PIL.ImageGrab
-from ctypes import Structure, c_long, windll, pointer
-
-u = windll.user32
-WM_SETTEXT = 0x000C
-WM_CLOSE = 0x0010
-BM_CLICK = 0x00F5
-
-
-class RECT(Structure):
-    'RECT structure in Win32 API.'
-    _fields_ = [(x, c_long) for x in ('left', 'top', 'right', 'bottom')]
+from windows import *
 
 
 def get_rect(hwnd):
@@ -32,36 +23,147 @@ def find_window(cls, parent=None):
     return u.FindWindowExW(parent, None, cls, None)
 
 
-def query(train):
-    'Queries information of the specified train number.'
+class Automation():
+    'Emulate keyboard and mouse events and collect data from the executable.'
 
-    base = 'ThunderRT6'
-    while True:
-        hwnd = find_window(base + 'FormDC')
-        if hwnd:
-            break
-        time.sleep(5)
+    def query(self, train):
+        'Queries information of the specified train number.'
+        u.SetForegroundWindow(self.hwnd)
+        u.SendMessageW(self.htext, WM_SETTEXT, None, train)
+        u.PostMessageW(self.hbutton, BM_CLICK, None, None)
+        time.sleep(0.5)
 
-    htext, hbutton = (
-        find_window(base + x, hwnd)
-        for x in ['TextBox', 'CommandButton']
-    )
+        # close a possible message box
+        hmsg = find_window('#32770', None)
+        if hmsg:
+            u.SendMessageW(hmsg, WM_CLOSE, None, None)
+            time.sleep(0.1)
+            raise LookupError
 
-    u.SetForegroundWindow(hwnd)
-    u.SendMessageW(htext, WM_SETTEXT, None, train)
-    u.PostMessageW(hbutton, BM_CLICK, None, None)
-    time.sleep(0.5)
+    def get_shot(self):
+        'Crops the screenshot of the window.'
+        img = shot(self.hwnd).convert('1', dither=False)
+        img = img.crop((3, 22, 1030, 622))
+        return PIL.Image.composite(img, self.empty, self.mask)
 
-    # close possible message box
-    hmsg = find_window('#32770', None)
-    if hmsg:
-        u.SendMessageW(hmsg, WM_CLOSE, None, None)
-        time.sleep(0.1)
-        raise LookupError
+    def get_text(self, keyword='CR'):
+        'Get label text from the window.'
+        self._dump_heap()
+        for obj in self._enum_vb_labels():
+            try:
+                caption = self._get_label_caption(obj)
+                assert keyword in caption
+            except AssertionError:
+                pass
+            else:
+                return caption
 
-    return shot(hwnd)
+    def __init__(self):
+        'Get handles on the window and the process.'
+        prefix = 'ThunderRT6'
+        self.hwnd = find_window(prefix + 'FormDC')
+        assert self.hwnd
+        self.htext = find_window(prefix + 'TextBox', self.hwnd)
+        self.hbutton = find_window(prefix + 'CommandButton', self.hwnd)
+
+        pid = c_long()
+        u.GetWindowThreadProcessId(self.hwnd, byref(pid))
+        assert pid
+
+        self.hproc = k.OpenProcess(PROCESS_READ_WRITE_QUERY, False, pid)
+        assert self.hproc
+
+        self.empty = PIL.Image.open('empty.png')
+        self.mask = PIL.Image.open('mask.png')
+
+    def __del__(self):
+        if hasattr(self, 'hproc'):
+            k.CloseHandle(self.hproc)
+
+    def _dump_heap(self):
+        'Dump the internal heap of the executable.'
+
+        # Get the internal heap address of the form caption
+        # This is done with a little undocumented SendMessage magic
+        heap_addr = u.SendMessageW(self.hwnd, VBM_WINDOWTITLEADDR, None, None)
+
+        # Get the heap at the form caption point
+        mbi = MEMORY_BASIC_INFORMATION()
+        mbi.BaseAddress = mbi.AllocationBase = heap_addr
+        size = k.VirtualQueryEx(self.hproc, heap_addr, byref(mbi), sizeof(mbi))
+        assert size == sizeof(mbi)
+
+        # Now go back and get the address of the entire heap
+        self.base_addr = base_addr = mbi.BaseAddress = mbi.AllocationBase
+        mbi.RegionSize = 0
+        size = k.VirtualQueryEx(self.hproc, base_addr, byref(mbi), sizeof(mbi))
+
+        # A couple of sanity checks, just to be safe
+        assert size == sizeof(mbi)
+        assert mbi.lType == MEM_PRIVATE
+        assert mbi.State == MEM_COMMIT
+        assert mbi.RegionSize > 0
+
+        # Dump the heap
+        self.buffer = create_string_buffer(mbi.RegionSize)
+        bytes_read = c_long()
+        assert k.ReadProcessMemory(
+            self.hproc, mbi.BaseAddress,
+            self.buffer, mbi.RegionSize, byref(bytes_read))
+        self.buf = bytearray(self.buffer)
+
+    def _enum_vb_labels(self):
+        'Parse the heap to get every label in the executable.'
+        label = self._parse_label_class()
+        base_addr_bytes = self._addr_to_bytes(0)
+        i = 0
+        while True:
+            # Search for all references to label
+            # (see internals.c for more details)
+            i = self.buf.find(label, i)
+            if i == -1:  # not found
+                raise StopIteration
+            else:
+                obj_addr = i - 44
+
+            # Check the base memory value to make sure it's really a VB object
+            if self.buf[obj_addr:].startswith(base_addr_bytes):
+                yield obj_addr
+
+            i += 1  # Keep searching from the next byte
+
+    def _parse_label_class(self):
+        'Get the global address of the label class.'
+        # Search for label->class_id (see internals.c for more details)
+        cls_id_addr = self.buf.index(b'VB.Label')
+        cls_id_addr_bytes = self._addr_to_bytes(cls_id_addr)
+
+        # Search for &(label->class_id)
+        cls_id_ptr_addr = self.buf.rindex(cls_id_addr_bytes, 0, cls_id_addr)
+
+        # VBClass *label = (uint8_t *) &(label->class_id) - 36
+        cls_struct_addr = cls_id_ptr_addr - 36
+        return self._addr_to_bytes(cls_struct_addr)
+
+    def _addr_to_bytes(self, n):
+        'Convert relative address to absolute pointer (four bytes).'
+        ctypes_long = c_long(self.base_addr + n)
+        ctypes_array = (c_char * 4).from_address(addressof(ctypes_long))
+        return bytearray(ctypes_array)
+
+    def _get_label_caption(self, obj_addr):
+        'Get caption of a label from its relative address.'
+        caption_ptr_addr = addressof(self.buffer) + obj_addr + 136
+        caption_addr = c_long.from_address(caption_ptr_addr).value
+        assert caption_addr
+        caption_addr += addressof(self.buffer) - self.base_addr
+        caption = c_char_p(caption_addr).value
+        return caption.decode('mbcs')
 
 
 if __name__ == '__main__':
+    me = Automation()
     for train in ('D1', 'G1'):
-        query(train).show()
+        me.query(train)
+        me.get_shot().show()
+        print(me.get_text())

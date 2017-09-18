@@ -6,7 +6,8 @@
 // @homepageURL https://github.com/Arnie97/emu-tools
 // @match       https://kyfw.12306.cn/otn/leftTicket/init
 // @grant       GM_xmlhttpRequest
-// @version     2017.09.17
+// @grant       GM_addStyle
+// @version     2017.09.18
 // ==/UserScript==
 
 // Forked from https://stackoverflow.com/a/4673436/5072722
@@ -40,8 +41,6 @@ function showTrainModel(i, obj) {
         return false;
     }
     var template = '<a onclick="$(this).children().toggle()">{0}<img src="https://moerail.ml/img/{1}.png" style="width: 600px; display: none;"></a>';
-    $(obj).attr('style', 'width: 380px;');
-    $(obj).find('.ls').attr('style', 'width: 100px;');
     $(obj).find('.ls>span').replaceWith(format(template, model, code));
     return true;
 }
@@ -62,3 +61,7 @@ GM_xmlhttpRequest({
     url: 'https://moerail.ml/models.json',
     onload: main
 });
+GM_addStyle('\
+    .ls          {width: auto  !important;} \
+    .ticket-info {width: 400px !important;} \
+');

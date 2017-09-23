@@ -17,7 +17,7 @@ function getTrainModel(code) {
     }
     for (var key in models) {
         var codes = models[key];
-        for (var i = codes.length; i; i--) {
+        for (var i = codes.length; i >= 0; i--) {
             if (code == codes[i]) {
                 return key;
             }
@@ -57,6 +57,6 @@ GM_xmlhttpRequest({
     onload: main
 });
 GM_addStyle('\
-    .ls          {width: auto  !important;} \
+    .ls          {width: 120px !important;} \
     .ticket-info {width: 400px !important;} \
 ');

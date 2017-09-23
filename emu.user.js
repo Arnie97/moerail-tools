@@ -7,16 +7,8 @@
 // @match       https://kyfw.12306.cn/otn/leftTicket/init
 // @grant       GM_xmlhttpRequest
 // @grant       GM_addStyle
-// @version     2017.09.18
+// @version     2017.09.23
 // ==/UserScript==
-
-// Forked from https://stackoverflow.com/a/4673436/5072722
-function format(str) {
-    var args = Array.prototype.slice.call(arguments, 1);
-    return str.replace(/{(\d+)}/g, function(match, number) {
-        return args[number] !== undefined? args[number]: match;
-    });
-}
 
 // Search the database
 function getTrainModel(code) {
@@ -40,8 +32,11 @@ function showTrainModel(i, obj) {
     if (!model) {
         return false;
     }
-    var template = '<a onclick="$(this).children().toggle()">{0}<img src="https://moerail.ml/img/{1}.png" style="width: 600px; display: none;"></a>';
-    $(obj).find('.ls>span').replaceWith(format(template, model, code));
+    var url = 'https://moerail.ml/img/' + code + '.png';
+    var img = $('<img>').attr('src', url).width(600).hide();
+    var link = $('<a>').attr('onclick', '$(this).children().toggle()');
+    link.text(model).append(img);
+    $(obj).find('.ls>span').replaceWith(link);
     return true;
 }
 

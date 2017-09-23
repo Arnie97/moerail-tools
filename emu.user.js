@@ -45,7 +45,12 @@ function main(dom) {
     models = JSON.parse(dom.responseText);
     var observer = new MutationObserver(function() {
         if ($('#trainum').html()) {
-            $('.ticket-info').map(showTrainModel);
+            var result = $('.ticket-info').map(showTrainModel);
+            var count = result.length, sum = 0;
+            result.each(function(i, x) {
+                sum += x? 1: 0;
+            });
+            console.log('EMU Tools:', count, 'checked,', sum, 'found');
         }
     });
     observer.observe($('#t-list>table')[0], {childList: true});

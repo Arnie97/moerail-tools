@@ -7,7 +7,7 @@
 // @match       https://kyfw.12306.cn/otn/leftTicket/init
 // @grant       GM_xmlhttpRequest
 // @grant       GM_addStyle
-// @version     2017.09.23
+// @version     2017.09.26
 // ==/UserScript==
 
 // Search the database
@@ -40,19 +40,24 @@ function showTrainModel(i, obj) {
     return true;
 }
 
+// Iterate through the items
+function checkPage() {
+    if (!$('#trainum').html()) {
+        return;
+    }
+    var result = $('.ticket-info').map(showTrainModel);
+    var count = result.length, sum = 0;
+    result.each(function(i, x) {
+        sum += x? 1: 0;
+    });
+    console.log('EMU Tools:', count, 'checked,', sum, 'found');
+}
+
 // Register the event listener
 function main(dom) {
     models = JSON.parse(dom.responseText);
-    var observer = new MutationObserver(function() {
-        if ($('#trainum').html()) {
-            var result = $('.ticket-info').map(showTrainModel);
-            var count = result.length, sum = 0;
-            result.each(function(i, x) {
-                sum += x? 1: 0;
-            });
-            console.log('EMU Tools:', count, 'checked,', sum, 'found');
-        }
-    });
+    checkPage();
+    var observer = new MutationObserver(checkPage);
     observer.observe($('#t-list>table')[0], {childList: true});
 }
 

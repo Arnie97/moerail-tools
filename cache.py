@@ -19,6 +19,8 @@ def main(path):
 
     codes = set()
     for day, trains in load().items():
+        if not trains:
+            continue
         for type in 'DGC':
             for train in trains[type]:
                 # G1234(Station A-Station B)

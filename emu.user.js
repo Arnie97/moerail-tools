@@ -7,12 +7,21 @@
 // @match       https://kyfw.12306.cn/otn/leftTicket/init
 // @grant       GM_xmlhttpRequest
 // @grant       GM_addStyle
-// @version     2017.09.26
+// @version     2018.02.10
 // ==/UserScript==
+
+var patterns = {
+    'CRH1A-A型': /D7(1|2[01]|3)/,
+    'CRH2A型': /C29/,
+    'CRH5A型': /C(13|50)/,
+    'CRH6A型': /C7[679]|S1/,
+    'CRH6F型': /C(69|78)|D75[6-8]/,
+    'NDJ3型': /S[25]/
+};
 
 // Search the database
 function getTrainModel(code) {
-    if ('GDC'.indexOf(code[0]) == -1) {
+    if ('GDCS'.indexOf(code[0]) == -1) {
         return;
     }
     for (var key in models) {
@@ -23,12 +32,31 @@ function getTrainModel(code) {
             }
         }
     }
+    for (var model in patterns) {
+        if (code.match(patterns[model])) {
+            return model;
+        }
+    }
+}
+
+// Beijing-Tianjin Intercity Railway
+function getIntercityTrainModel(code, obj) {
+    if (!code.match(/C2[0-6]/)) {
+        return;
+    }
+    var table_row = obj.parentNode.parentNode;
+    var coach_class = table_row.childNodes[1].id;
+    if (coach_class.match(/^SWZ_/)) {  // Business Coach
+        return 'CR400AF/BF型';
+    } else if (coach_class.match(/^TZ_/)) {  // Premier Coach
+        return 'CRH3C型';
+    }
 }
 
 // Patch items on the web page
 function showTrainModel(i, obj) {
     var code = $(obj).find('a.number').text();
-    var model = getTrainModel(code);
+    var model = getTrainModel(code) || getIntercityTrainModel(code, obj);
     if (!model) {
         return false;
     }

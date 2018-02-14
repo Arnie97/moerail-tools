@@ -5,9 +5,10 @@
 // @namespace   https://github.com/Arnie97
 // @homepageURL https://github.com/Arnie97/emu-tools
 // @match       https://kyfw.12306.cn/otn/leftTicket/init
+// @match       https://kyfw.12306.cn/otn/czxx/init
 // @grant       GM_xmlhttpRequest
 // @grant       GM_addStyle
-// @version     2018.02.10
+// @version     2018.02.14
 // ==/UserScript==
 
 var patterns = {
@@ -65,16 +66,16 @@ function showTrainModel(i, obj) {
     var img = $('<img>').attr('src', url).width(600).hide();
     var link = $('<a>').attr('onclick', '$(this).children().toggle()');
     link.text(model).append(img);
-    $(obj).find('.ls>span').replaceWith(link);
+    $(obj).find('.ls>span, td:nth-child(3)').contents().replaceWith(link);
     return true;
 }
 
 // Iterate through the items
 function checkPage() {
-    if (!$('#trainum').html()) {
+    if (!$('#trainum, #_sear_tips').html()) {
         return;
     }
-    var result = $('.ticket-info').map(showTrainModel);
+    var result = $('.ticket-info, #_query_table_datas>tr').map(showTrainModel);
     var count = result.length, sum = 0;
     result.each(function(i, x) {
         sum += x? 1: 0;
@@ -87,7 +88,7 @@ function main(dom) {
     models = JSON.parse(dom.responseText);
     checkPage();
     var observer = new MutationObserver(checkPage);
-    observer.observe($('#t-list>table')[0], {childList: true});
+    observer.observe($('.t-list>table')[0], {childList: true});
 }
 
 GM_xmlhttpRequest({

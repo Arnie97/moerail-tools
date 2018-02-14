@@ -65,11 +65,11 @@ function showTrainModel(i, obj) {
         return 1;
     } else if (model[1]) {
         var url = 'https://moerail.ml/img/' + code + '.png';
-        var img = $('<img>').attr('src', url).width(600).hide();
-        var node = $('<a>').text(model[0]).append(img);
+        var img = $('<img>').attr('src', url);
+        var node = $('<a>').addClass('route').text(model[0]).append(img);
         node.attr('onclick', '$(this).children().toggle()');
     } else {
-        var node = $('<span>').text(model[0]);
+        var node = $('<span>').addClass('route').text(model[0]);
     }
     $(obj).find('.ls>span, td:nth-child(3)').contents().replaceWith(node);
     return model[1]? 2: 3;
@@ -106,6 +106,20 @@ GM_xmlhttpRequest({
     onload: main
 });
 GM_addStyle('\
-    .ls          {width: 120px !important;} \
-    .ticket-info {width: 400px !important;} \
+    .ls {                           \
+        width: 120px !important;    \
+    }                               \
+    .ticket-info {                  \
+        width: 400px !important;    \
+    }                               \
+    .route>img {                    \
+        display: none;              \
+        position: absolute;         \
+        z-index: 120;               \
+        width: 640px;               \
+        padding: 4px;               \
+        background: #fff;           \
+        border: 2px solid #ddd;     \
+        border-radius: 4px;         \
+    }                               \
 ');

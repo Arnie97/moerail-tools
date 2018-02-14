@@ -11,6 +11,7 @@
 // @version     2018.02.14
 // ==/UserScript==
 
+// Attempt to infer the model of the trains from these rules
 var patterns = {
     'CRH1A-A型': /D7(1|2[01]|3)/,
     'CRH2A型': /C(29|5[0356])/,
@@ -30,13 +31,13 @@ function getTrainModel(code) {
         var codes = models[key];
         for (var i = codes.length; i >= 0; i--) {
             if (code == codes[i]) {
-                return key;
+                return [key, true];
             }
         }
     }
-    for (var model in patterns) {
-        if (code.match(patterns[model])) {
-            return model;
+    for (var key in patterns) {
+        if (code.match(patterns[key])) {
+            return [key];
         }
     }
 }
@@ -49,38 +50,46 @@ function getIntercityTrainModel(code, obj) {
     var table_row = obj.parentNode.parentNode;
     var coach_class = table_row.childNodes[1].id;
     if (coach_class.match(/^SWZ_/)) {  // Business Coach
-        return 'CR400AF/BF型';
+        return ['CR400AF/BF型'];
     } else if (coach_class.match(/^TZ_/)) {  // Premier Coach
-        return 'CRH3C型';
+        return ['CRH3C型'];
     }
 }
 
 // Patch items on the web page
+// Return 1 for unknown trains, 2 for found ones and 3 for inferred ones
 function showTrainModel(i, obj) {
     var code = $(obj).find('a.number').text();
     var model = getTrainModel(code) || getIntercityTrainModel(code, obj);
     if (!model) {
-        return false;
+        return 1;
+    } else if (model[1]) {
+        var url = 'https://moerail.ml/img/' + code + '.png';
+        var img = $('<img>').attr('src', url).width(600).hide();
+        var node = $('<a>').text(model[0]).append(img);
+        node.attr('onclick', '$(this).children().toggle()');
+    } else {
+        var node = $('<span>').text(model[0]);
     }
-    var url = 'https://moerail.ml/img/' + code + '.png';
-    var img = $('<img>').attr('src', url).width(600).hide();
-    var link = $('<a>').attr('onclick', '$(this).children().toggle()');
-    link.text(model).append(img);
-    $(obj).find('.ls>span, td:nth-child(3)').contents().replaceWith(link);
-    return true;
+    $(obj).find('.ls>span, td:nth-child(3)').contents().replaceWith(node);
+    return model[1]? 2: 3;
 }
 
 // Iterate through the items
 function checkPage() {
-    if (!$('#trainum, #_sear_tips').html()) {
+    if (!$('#trainum, #_sear_tips>p').html()) {
         return;
     }
     var result = $('.ticket-info, #_query_table_datas>tr').map(showTrainModel);
-    var count = result.length, sum = 0;
+    var count = [result.length, 0, 0, 0];
     result.each(function(i, x) {
-        sum += x? 1: 0;
+        count[x]++;
     });
-    console.log('EMU Tools:', count, 'checked,', sum, 'found');
+
+    var msg = 'EMU Tools: {0} checked, {2} found, {3} inferred';
+    console.log(msg.replace(/{(\d+)}/g, function(match, number) {
+        return count[number];
+    }));
 }
 
 // Register the event listener

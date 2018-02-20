@@ -8,13 +8,13 @@
 // @match       https://kyfw.12306.cn/otn/czxx/init
 // @grant       GM_xmlhttpRequest
 // @grant       GM_addStyle
-// @version     2018.02.14
+// @version     2018.02.20
 // ==/UserScript==
 
 // Attempt to infer the model of the trains from these rules
 var patterns = {
     'CRH1A-A型': /D7(1|2[01]|3)/,
-    'CRH2A型': /C(29|5[0356])/,
+    'CRH2A型': /C5[0356]/,
     'CRH5A型': /C(13|50)/,
     'CRH5G/2G型': /C85/,
     'CRH6A型': /C7[679]|S1/,
@@ -42,17 +42,22 @@ function getTrainModel(code) {
     }
 }
 
-// Beijing-Tianjin Intercity Railway
+// Attempt to infer the model of intercity trains from the coach class
 function getIntercityTrainModel(code, obj) {
-    if (!code.match(/C2[0-6]/)) {
-        return;
-    }
     var table_row = obj.parentNode.parentNode;
-    var coach_class = table_row.childNodes[1].id;
-    if (coach_class.match(/^SWZ_/)) {  // Business Coach
-        return ['CR400AF/BF型'];
-    } else if (coach_class.match(/^TZ_/)) {  // Premier Coach
-        return ['CRH3C型'];
+    var coach_class = table_row.children[1];
+    if (code.match(/C2[0-6]/)) {  // Tianjin
+        if (coach_class.id.match(/^SWZ_/)) {  // Business Coach
+            return ['CR400AF/BF型'];
+        } else if (coach_class.id.match(/^TZ_/)) {  // Premier Coach
+            return ['CRH3C型'];
+        }
+    } else if (code.match(/C29/)) {  // Zhengzhou
+        if (coach_class.firstChild.textContent === '--') {
+            return ['CRH6A型'];
+        } else if (coach_class.id.match(/^SWZ_/)) {
+            return ['CRH380A统型'];
+        }
     }
 }
 

@@ -5,10 +5,14 @@
 // @namespace   https://github.com/Arnie97
 // @homepageURL https://github.com/Arnie97/emu-tools
 // @match       https://kyfw.12306.cn/otn/leftTicket/init
+// @match       https://kyfw.12306.cn/otn/leftTicketPrice/init
+// @match       https://kyfw.12306.cn/otn/leftTicketPrice/initPublicPrice
 // @match       https://kyfw.12306.cn/otn/czxx/init
+// @icon        https://moerail.ml/favicon.ico
+// @connect     moerail.ml
 // @grant       GM_xmlhttpRequest
 // @grant       GM_addStyle
-// @version     2018.02.20
+// @version     2018.03.16
 // ==/UserScript==
 
 // Attempt to infer the model of the trains from these rules

@@ -5,9 +5,10 @@ import re
 import json
 
 
-def main(argv):
+def main(src, dest):
+    'Group the train routes by the vehicle model used.'
     pattern = r'新?CR[\w/-]+型(?:重联)?'
-    with open(argv[0]) as f:
+    with open(src) as f:
         lst = {}
         for line in f:
             code, _, model = line.partition(' ')
@@ -24,9 +25,9 @@ def main(argv):
 
     print(len(lst), 'models found:')
     print('\n'.join(sorted(lst.keys())))
-    with open(argv[1], 'w') as f:
+    with open(dest, 'w') as f:
         json.dump(lst, f)
 
 
 if __name__ == '__main__':
-    main(sys.argv[1:])
+    main(*sys.argv[1:])

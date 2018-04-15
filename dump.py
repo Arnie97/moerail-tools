@@ -1,10 +1,10 @@
 #!/usr/bin/env python3
 
-import sys
 from typing import List, Dict, Iterable
 
 import kyfw
 import hyfw
+from stations import path
 
 
 def stations() -> Dict[str, List[str]]:
@@ -41,9 +41,8 @@ def serialize(stations: Dict[str, List[str]]) -> Iterable[str]:
 
 
 if __name__ == '__main__':
-    path = sys.argv[1] if len(sys.argv) > 1 else 'station_name.js'
     with open(path, 'w') as f:
         all_stations = stations()
         serialized = '@'.join(serialize(all_stations))
-        print('var station_names = "@%s";' % serialized, file=f)
+        print("var station_names = '@%s';" % serialized, file=f)
         print('Dumped %d stations to "%s".' % (len(all_stations), path))

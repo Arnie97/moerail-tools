@@ -1,3 +1,7 @@
+// Author: John Kozee
+// Purpose: Enumerate Label captions given a known hWnd
+// Date: June 12, 2004
+
 typedef struct {
     uint8_t something_else[36];
     char *class_id;

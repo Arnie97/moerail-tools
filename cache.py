@@ -4,13 +4,7 @@ import time
 import json
 import os.path
 from shot import Automation
-
-
-def load():
-    # https://kyfw.12306.cn/otn/resources/js/query/train_list.js
-    with open('train_list.js', encoding='utf-8') as f:
-        json_text = f.read().partition('=')[2]
-    return json.loads(json_text)
+from trains import load
 
 
 def main(path):

@@ -1,12 +1,12 @@
 #!/usr/bin/env python3
 
-from typing import List, Dict, Iterable
+from typing import List, Iterable
 
 import kyfw
 import hyfw
 from tmis import tmis
 from stations import path
-from interact import shell
+from interact import shell, progress
 
 
 class AttrDict(dict):
@@ -15,7 +15,7 @@ class AttrDict(dict):
     __setattr__ = dict.__setitem__
 
 
-def stations() -> Dict[str, List[str]]:
+def combine_stations() -> Iterable[List[str]]:
     'Combine the two railway station datasets by telecode.'
     stations = AttrDict()
     names = {}
@@ -57,29 +57,53 @@ def stations() -> Dict[str, List[str]]:
                 old[:2] = new[:2]
 
         else:
-            conflict = None
             if s.telecode not in stations:
                 stations[s.telecode] = [''] * 4
             stations[s.telecode][:2] = new[:2]
+            continue
 
-        if conflict:
-            ns = AttrDict(vars())
-            ns.s = ns.stations
-            shell(ns, conflict)
+        # resolve merge conflicts manually
+        shell(dict(vars(), s=stations), '\n%s' % conflict)
 
-    return stations
-
-
-def serialize(stations: Dict[str, List[str]]) -> Iterable[str]:
-    'Dump the stations to delimiter-separated strings.'
     for k, v in stations.items():
+        # drop telecodes with spaces
+        # so those can be used as temporary names in conflict solving
         v.insert(2, '' if ' ' in k else k)
-        yield '|'.join(v)
+        yield v
+
+
+def heuristic_search(stations) -> Iterable[List[str]]:
+    'Search the TMIS database using name initials.'
+    # create indexes for faster lookup
+    names, tmis_codes = (
+        {s[field]: index for index, s in enumerate(stations)}
+        for field in (1, -2)
+    )
+    initials = {name[0] for name in names}
+    for initial in initials:
+        progress()
+        for name, tmis_code in tmis(initial).items():
+            # append as a new station
+            if name not in names and tmis_code not in tmis_codes:
+                yield ['', name, '', tmis_code, '']
+
+            # replace in-place
+            elif name in names:
+                old = stations[names[name]]
+                if not old[-2]:
+                    old[-2] = tmis_code
+                elif old[-2] != tmis_code:
+                    conflict = 'TMIS code conflict: %s' % old
+                    shell(dict(vars(), s=stations), '\n%s' % conflict)
 
 
 if __name__ == '__main__':
     with open(path, 'w') as f:
-        all_stations = stations()
-        serialized = '@'.join(serialize(all_stations))
+        stations = list(combine_stations())
+        stations.extend(heuristic_search(stations))
+        shell(dict(vars(), s=stations), 'Well done.')
+
+        # dump the stations to delimiter-separated strings
+        serialized = '@'.join('|'.join(s) for s in stations)
         print("var station_names = '@%s';" % serialized, file=f)
-        print('Dumped %d stations to "%s".' % (len(all_stations), path))
+        print('Dumped %d stations to "%s".' % (len(stations), path))

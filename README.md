@@ -18,20 +18,21 @@
 * `kyfw.py` 解析客运车站的电报码、拼音码、拼音等。
     - 数据来自[车票预订](https://kyfw.12306.cn/otn/leftTicket/init)页面中的 [station_name.js](https://kyfw.12306.cn/otn/resources/js/framework/station_name.js)。
 
-* `dump.py` 从以上两个接口分别读取数据，合并重复数据，并保存于本地的 `station_name.js`。
+* `tmis.py` 交互式查询车站的 TMIS 代码。
+    - 请输入汉字站名，匹配方式为前方一致。
+        - 示例输入：`津沪`
+        - 示例输出：`津沪所	10348`
+    - 数据来自[货运营业站服务信息查询](http://hyfw.12306.cn/hyinfo/action/FwcszsAction_index?type=1)页面，该接口的亮点在于可以查到线路所及不办货车站的代码。感谢维基人 [N509FZ](https://zh.wikipedia.org/wiki/User:N509FZ/线路所) 指出此接口。
+
+* `dump.py` 从以上三个接口分别读取数据，合并重复数据，并保存于本地的 `station_name.js`。
+    - 发生合并冲突时，会弹出 Python Shell，以便用户准确解决。
     - 输出结果已通过[铁路信息查询](https://moerail.ml)网站呈现。
     - 输出结果的格式与 12306 网站提供的 `station_name.js` 相同，即以 `@` `|` 作为分隔符。
 
 * `stations.py` 启动一个 Python Shell，用于交互式查询上述 `station_name.js`（以及其他类似格式的文件）。
     - 示例：中国铁路名字最短的车站是？
         - 输入：`sorted(s, key=lambda i: len(i[1]))[0]`
-        - 输出：`['son', '宋', 'SOB', '', '']`
-
-* `tmis.py` 交互式查询车站的 TMIS 代码。
-    - 请输入汉字站名，匹配方式为前方一致。
-        - 示例输入：`津沪`
-        - 示例输出：`津沪所	10348`
-    - 数据来自[货运营业站服务信息查询](http://hyfw.12306.cn/hyinfo/action/FwcszsAction_index?type=1)页面，该接口的亮点在于可以查到线路所及不办货车站的代码。感谢维基人 [N509FZ](https://zh.wikipedia.org/wiki/User:N509FZ/线路所) 指出此接口。
+        - 输出：`['son', '宋', 'SOB', '57368', '']`
 
 ### 车次查询
 #### 依赖说明

@@ -5,6 +5,8 @@ import requests
 from string import ascii_uppercase as alphabet
 from typing import List, Dict
 
+from interact import progress
+
 
 def stations(pinyin: str) -> List[Dict[str, str]]:
     'Get all the stations from 95306.'
@@ -17,6 +19,7 @@ def stations(pinyin: str) -> List[Dict[str, str]]:
 
 def dfs(pinyin='') -> List[Dict[str, str]]:
     'Load recursively when the API limit is exceeded.'
+    progress()
     results = stations(pinyin)
     if len(results) < 100:
         return results
@@ -27,6 +30,7 @@ def dfs(pinyin='') -> List[Dict[str, str]]:
 if __name__ == '__main__':
     while True:
         results = dfs(input('> '))
+        print()
         for r in results:
             print(str(r).replace("'", ''))
         print('=', len(results))

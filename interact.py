@@ -1,5 +1,13 @@
 #!/usr/bin/env python3
 
+import sys
+
+
+def progress(dot='.', file=sys.stdout):
+    'Print a progress bar.'
+    file.write(dot)
+    file.flush()
+
 
 def shell(ns=None, banner=None):
     'Start an interactive shell.'

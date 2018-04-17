@@ -4,6 +4,8 @@ import json
 import requests
 from collections import OrderedDict
 
+from interact import progress
+
 
 def tmis(name='', bureau=0) -> OrderedDict:
     url = 'http://hyfw.12306.cn/hyinfo/action/FwcszsAction_getljcz'
@@ -21,7 +23,9 @@ if __name__ == '__main__':
         results = tmis(name)
         if len(results) == 50:
             for i in range(1, 19):
+                progress()
                 results.update(tmis(name, i))
+            print()
         for k, v in results.items():
             print(k, v, sep='\t')
         print('=', len(results))

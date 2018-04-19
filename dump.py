@@ -5,7 +5,7 @@ from typing import List, Iterable
 import kyfw
 import hyfw
 import tmis
-from stations import path
+from stations import path, dump_stations
 from interact import shell, progress
 
 
@@ -98,12 +98,11 @@ def heuristic_search(stations) -> Iterable[List[str]]:
 
 
 if __name__ == '__main__':
-    with open(path, 'w') as f:
-        stations = list(combine_stations())
-        stations.extend(heuristic_search(stations))
-        shell(dict(vars(), s=stations), 'Well done.')
+    stations = list(combine_stations())
+    stations.extend(heuristic_search(stations))
 
-        # dump the stations to delimiter-separated strings
-        serialized = '@'.join('|'.join(s) for s in stations)
-        print("var station_names = '@%s';" % serialized, file=f)
+    shell(dict(vars(), s=stations), 'Well done.')
+
+    with open(path, 'w') as f:
+        print(dump_stations(stations), file=f)
         print('Dumped %d stations to "%s".' % (len(stations), path))

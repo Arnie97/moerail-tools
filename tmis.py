@@ -17,15 +17,20 @@ def tmis(name='', bureau=0) -> OrderedDict:
     return OrderedDict((d['HZZM'], d['TMISM']) for d in list_of_dicts)
 
 
+def dfs(name='') -> OrderedDict:
+    'Split bulk requests into chunks.'
+    results = tmis(name)
+    if len(results) == 50:
+        for i in range(1, 19):
+            progress()
+            results.update(tmis(name, i))
+    return results
+
+
 if __name__ == '__main__':
     while True:
-        name = input('> ')
-        results = tmis(name)
-        if len(results) == 50:
-            for i in range(1, 19):
-                progress()
-                results.update(tmis(name, i))
-            print()
+        results = dfs(input('> '))
+        print()
         for k, v in results.items():
             print(k, v, sep='\t')
         print('=', len(results))

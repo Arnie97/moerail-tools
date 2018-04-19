@@ -4,7 +4,7 @@ from typing import List, Iterable
 
 import kyfw
 import hyfw
-from tmis import tmis
+import tmis
 from stations import path
 from interact import shell, progress
 
@@ -82,7 +82,7 @@ def heuristic_search(stations) -> Iterable[List[str]]:
     initials = {name[0] for name in names}
     for initial in initials:
         progress()
-        for name, tmis_code in tmis(initial).items():
+        for name, tmis_code in tmis.dfs(initial).items():
             # append as a new station
             if name not in names and tmis_code not in tmis_codes:
                 yield ['', name, '', tmis_code, '']

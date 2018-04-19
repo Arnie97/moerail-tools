@@ -12,7 +12,13 @@ def tmis(name='', bureau=0) -> OrderedDict:
     params = 'limit timestamp sheng shi'
     params = {k: '' for k in params.split()}
     params.update(q=name, ljdm=format(bureau, '02'))
-    response = requests.post(url, params)
+    while True:
+        try:
+            response = requests.post(url, params, timeout=1)
+        except requests.exceptions.Timeout:
+            progress('X')
+        else:
+            break
     list_of_dicts = json.loads(response.text)
     return OrderedDict((d['HZZM'], d['TMISM']) for d in list_of_dicts)
 

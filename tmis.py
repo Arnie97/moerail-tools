@@ -38,8 +38,8 @@ def main(name: str):
     results = dfs(name)
     if len(results) >= 50:
         print()
-    for pair in results.items():
-        print('| %s\t%s' % pair)
+    for k, v in results.items():
+        print('|', k.ljust(5, '\u3000'), v)
     print('=', len(results), '\n')
 
 

@@ -72,14 +72,17 @@ def combine_stations() -> Iterable[List[str]]:
         yield v
 
 
-def heuristic_search(stations) -> Iterable[List[str]]:
+def heuristic_search(stations, initials=None) -> Iterable[List[str]]:
     'Search the TMIS database using name initials.'
     # create indexes for faster lookup
     names, tmis_codes = (
         {s[field]: index for index, s in enumerate(stations)}
         for field in (1, -2)
     )
-    initials = {name[0] for name in names}
+    if not initials:
+        initials = {name[0] for name in names}.union(
+            {s[-1] for s in stations}
+        )
     for initial in initials:
         progress()
         for name, tmis_code in tmis.dfs(initial).items():

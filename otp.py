@@ -3,6 +3,8 @@
 import datetime
 import requests
 
+from interact import repl
+
 
 def station_encode(s: str) -> str:
     return '-' + '-'.join(
@@ -31,8 +33,8 @@ def print_status(response: requests.Response):
         print('X %d error' % response.status_code)
 
 
-def terminal():
-    options = input('> ').split()
+def main(options: str):
+    options = options.split()
     if len(options) < 2:
         print('# usage: train stations')
         return False
@@ -43,8 +45,4 @@ def terminal():
 
 
 if __name__ == '__main__':
-    while True:
-        try:
-            terminal()
-        except (KeyboardInterrupt, EOFError):
-            break
+    repl(main)

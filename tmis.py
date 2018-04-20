@@ -4,7 +4,7 @@ import json
 import requests
 from collections import OrderedDict
 
-from interact import progress
+from interact import repl, progress
 
 
 def tmis(name='', bureau=0) -> OrderedDict:
@@ -33,10 +33,15 @@ def dfs(name='') -> OrderedDict:
     return results
 
 
-if __name__ == '__main__':
-    while True:
-        results = dfs(input('> '))
+def main(name: str):
+    'Format the query results.'
+    results = dfs(name)
+    if len(results) >= 50:
         print()
-        for k, v in results.items():
-            print(k, v, sep='\t')
-        print('=', len(results))
+    for pair in results.items():
+        print('| %s\t%s' % pair)
+    print('=', len(results), '\n')
+
+
+if __name__ == '__main__':
+    repl(main)

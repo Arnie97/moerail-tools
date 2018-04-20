@@ -1,12 +1,24 @@
 #!/usr/bin/env python3
 
 import sys
+import readline
+from typing import Callable
 
 
 def progress(dot='.', file=sys.stdout):
     'Print a progress bar.'
     file.write(dot)
     file.flush()
+
+
+def repl(handler: Callable, prompt='> '):
+    'Prompt for user input.'
+    while True:
+        try:
+            handler(input(prompt).strip())
+        except (KeyboardInterrupt, EOFError):
+            print()
+            break
 
 
 def shell(ns=None, banner=None):

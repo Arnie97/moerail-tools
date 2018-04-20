@@ -5,7 +5,7 @@ import requests
 from string import ascii_uppercase as alphabet
 from typing import List, Dict
 
-from interact import progress
+from interact import repl, progress
 
 
 def stations(pinyin: str) -> List[Dict[str, str]]:
@@ -27,10 +27,14 @@ def dfs(pinyin='') -> List[Dict[str, str]]:
         return sum((dfs(pinyin + c) for c in alphabet), [])
 
 
+def main(pinyin: str):
+    'Format the query results.'
+    results = dfs(pinyin)
+    print()
+    for r in results:
+        print('|', str(r).replace("'", ''))
+    print('=', len(results), '\n')
+
+
 if __name__ == '__main__':
-    while True:
-        results = dfs(input('> '))
-        print()
-        for r in results:
-            print(str(r).replace("'", ''))
-        print('=', len(results))
+    repl(main)

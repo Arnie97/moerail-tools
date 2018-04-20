@@ -1,7 +1,6 @@
 #!/usr/bin/env python3
 
 import sys
-import readline
 from typing import Callable
 
 
@@ -13,12 +12,36 @@ def progress(dot='.', file=sys.stdout):
 
 def repl(handler: Callable, prompt='> '):
     'Prompt for user input.'
+    try:
+        import readline
+        from stations import path, load_stations
+        with open(path) as f:
+            global names
+            names = [s[1] for s in load_stations(f.read())]
+
+    except (ImportError, FileNotFoundError):
+        pass
+
+    else:
+        readline.parse_and_bind('tab: complete')
+        readline.set_completer(suggestions)
+
     while True:
         try:
             handler(input(prompt).strip())
         except (KeyboardInterrupt, EOFError):
             print()
             break
+
+
+def suggestions(text: str, state: int):
+    'Generate completion suggestions.'
+    text = text.strip()
+    if not text:
+        return
+    p = [i for i in names if i.startswith(text)]
+    if state < len(p):
+        return p[state]
 
 
 def shell(ns=None, banner=None):

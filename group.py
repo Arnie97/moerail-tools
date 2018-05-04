@@ -3,7 +3,7 @@
 import re
 import json
 
-from interact import argv
+from interact import argv, open
 
 
 def main(src, dest):

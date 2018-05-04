@@ -2,7 +2,7 @@
 
 from typing import Iterable, List
 
-from interact import shell, argv
+from interact import shell, argv, open
 path = argv(1) or 'station_name.js'
 
 

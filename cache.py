@@ -6,7 +6,7 @@ from typing import Iterable, List, TextIO
 
 from shot import Automation
 from trains import load_trains, decompose, path
-from interact import argv
+from interact import argv, open
 
 
 def mkdir(path: str):
@@ -52,7 +52,7 @@ def batch_query(me: Automation, codes: Iterable, img_dir: str, models: TextIO):
 
 if __name__ == '__main__':
     me = Automation()
-    with open(path, encoding='utf-8') as f:
+    with open(path) as f:
         codes = unique_trains(f)
     time.sleep(5)
 

@@ -6,7 +6,7 @@ import kyfw
 import hyfw
 import tmis
 from stations import path, dump_stations
-from interact import shell, progress
+from interact import shell, progress, open
 
 
 class AttrDict(dict):

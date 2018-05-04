@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 
 import sys
+import builtins
 from typing import Callable
 
 
@@ -61,6 +62,11 @@ def shell(ns=None, banner=None):
 def argv(n: int, default='') -> str:
     'Return the n-th command-line argument if it exists, or default otherwise.'
     return sys.argv[n] if len(sys.argv) > n else default
+
+
+def open(file, mode='r', buffering=-1, encoding='utf-8', *args, **kwargs):
+    'Open text files as UTF-8 by default.'
+    return builtins.open(file, mode, buffering, encoding, *args, **kwargs)
 
 
 if __name__ == '__main__':

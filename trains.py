@@ -3,7 +3,7 @@
 import json
 from typing import Iterable, Tuple
 
-from interact import shell, argv
+from interact import shell, argv, open
 path = argv(1) or 'train_list.js'
 
 
@@ -35,7 +35,7 @@ def parse_trains(data: dict) -> Iterable[Tuple[str, str, str, str]]:
 
 if __name__ == '__main__':
     print('Loading...')
-    with open(path, encoding='utf-8') as f:
+    with open(path) as f:
         data = load_trains(f.read())
         t = list(set(parse_trains(data)))
     print('Ready.')

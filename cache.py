@@ -6,7 +6,7 @@ from typing import Iterable, List, TextIO
 
 from shot import Automation
 from trains import load_trains, decompose, path
-from interact import argv, open
+from util import argv, open
 
 
 def mkdir(path: str):

@@ -3,7 +3,7 @@
 import json
 from typing import Iterable, Tuple
 
-from interact import shell, argv, open
+from util import shell, argv, open
 path = argv(1) or 'train_list.js'
 
 

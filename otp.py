@@ -3,7 +3,7 @@
 import datetime
 import requests
 
-from interact import repl
+from util import repl
 
 
 def station_encode(s: str) -> str:

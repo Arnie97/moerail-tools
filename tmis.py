@@ -4,7 +4,7 @@ import json
 import requests
 from collections import OrderedDict
 
-from interact import repl, progress
+from util import repl, progress
 
 
 def tmis(name='', bureau=0) -> OrderedDict:

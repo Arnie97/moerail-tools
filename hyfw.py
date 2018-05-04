@@ -5,7 +5,7 @@ import requests
 from string import ascii_uppercase as alphabet
 from typing import List, Dict
 
-from interact import repl, progress
+from util import repl, progress
 
 
 def stations(pinyin: str) -> List[Dict[str, str]]:

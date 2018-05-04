@@ -1,11 +1,15 @@
 #!/usr/bin/env python3
 
 import json
+import sys
+from typing import Iterable, Tuple
 
 from interact import shell
+path = sys.argv[1] if len(sys.argv) > 1 else 'train_list.js'
 
 
 def decompose(s):
+    'Split the information string by delimiters.'
     # G1234(Station A-Station B)
     return s.translate({
         ord(k): v for k, v in {
@@ -14,14 +18,15 @@ def decompose(s):
     }).split()
 
 
-def load():
+def load_trains(script: str) -> dict:
+    'Deserialize the jsonp script.'
     # https://kyfw.12306.cn/otn/resources/js/query/train_list.js
-    with open('train_list.js', encoding='utf-8') as f:
-        json_text = f.read().partition('=')[2]
+    json_text = script.partition('=')[2]
     return json.loads(json_text)
 
 
-def main(data):
+def parse_trains(data: dict) -> Iterable[Tuple[str, str, str, str]]:
+    'Flatten the train list and return all items in it.'
     for day, trains in data.items():
         for train_type in trains.values():
             for train in train_type:
@@ -31,6 +36,8 @@ def main(data):
 
 if __name__ == '__main__':
     print('Loading...')
-    t = list(set(main(load())))
+    with open(path, encoding='utf-8') as f:
+        data = load_trains(f.read())
+        t = list(set(parse_trains(data)))
     print('Ready.')
     shell({'t': t}, 'len(t) == %d.' % len(t))

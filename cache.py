@@ -37,9 +37,8 @@ def unique_trains(file: TextIO) -> List[str]:
     return codes
 
 
-def batch_query(codes: Iterable, img_dir: str, models: TextIO):
+def batch_query(me: Automation, codes: Iterable, img_dir: str, models: TextIO):
     'Save screenshots and train models for all the given trains.'
-    me = Automation()
     for code in codes:
         try:
             me.query(code)
@@ -52,6 +51,7 @@ def batch_query(codes: Iterable, img_dir: str, models: TextIO):
 
 
 if __name__ == '__main__':
+    me = Automation()
     with open(path, encoding='utf-8') as f:
         codes = unique_trains(f)
     time.sleep(5)
@@ -59,4 +59,4 @@ if __name__ == '__main__':
     img_dir = argv(3) or 'img'
     mkdir(img_dir)
     with open(argv(2) or 'models.txt', 'w') as f:
-        batch_query(codes, img_dir, f)
+        batch_query(me, codes, img_dir, f)

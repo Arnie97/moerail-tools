@@ -18,7 +18,7 @@ def shot(hwnd):
     return PIL.ImageGrab.grab(get_rect(hwnd))
 
 
-def find_window(cls, parent=None):
+def find_window(cls=None, parent=None):
     'Finds window or window control.'
     return u.FindWindowExW(parent, None, cls, None)
 
@@ -34,7 +34,7 @@ class Automation():
         time.sleep(0.5)
 
         # close a possible message box
-        hmsg = find_window('#32770', None)
+        hmsg = find_window('#32770')
         if hmsg:
             u.SendMessageW(hmsg, WM_CLOSE, None, None)
             time.sleep(0.1)
@@ -62,16 +62,20 @@ class Automation():
         'Get handles on the window and the process.'
         prefix = 'ThunderRT6'
         self.hwnd = find_window(prefix + 'FormDC')
-        assert self.hwnd
+        assert self.hwnd, 'Visual Basic window forms not found'
         self.htext = find_window(prefix + 'TextBox', self.hwnd)
+        assert self.htext, 'Text boxes not found'
         self.hbutton = find_window(prefix + 'CommandButton', self.hwnd)
+        assert self.hbutton, 'Command buttons not found'
+        hmsg = find_window('#32770')
+        assert not hmsg, 'Please close all the message boxes before running'
 
         pid = c_long()
         u.GetWindowThreadProcessId(self.hwnd, byref(pid))
-        assert pid
+        assert pid, 'Process not found'
 
         self.hproc = k.OpenProcess(PROCESS_READ_WRITE_QUERY, False, pid)
-        assert self.hproc
+        assert self.hproc, 'Memory access denied'
 
         self.empty = PIL.Image.open('empty.png')
         self.mask = PIL.Image.open('mask.png')
@@ -135,6 +139,7 @@ class Automation():
     def _parse_label_class(self):
         'Get the global address of the label class.'
         # Search for label->class_id (see internals.c for more details)
+        assert b'VB.Label' in self.buf, 'Incompatible memory layout'
         cls_id_addr = self.buf.index(b'VB.Label')
         cls_id_addr_bytes = self._addr_to_bytes(cls_id_addr)
 

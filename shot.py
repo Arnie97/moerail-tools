@@ -3,7 +3,9 @@
 import time
 import PIL.Image
 import PIL.ImageGrab
+
 from windows import *
+from util import module_dir
 
 
 def get_rect(hwnd):
@@ -77,8 +79,8 @@ class Automation():
         self.hproc = k.OpenProcess(PROCESS_READ_WRITE_QUERY, False, pid)
         assert self.hproc, 'Memory access denied'
 
-        self.empty = PIL.Image.open('empty.png')
-        self.mask = PIL.Image.open('mask.png')
+        self.empty = PIL.Image.open(module_dir('empty.png'))
+        self.mask = PIL.Image.open(module_dir('mask.png'))
 
     def __del__(self):
         if hasattr(self, 'hproc'):
@@ -86,7 +88,6 @@ class Automation():
 
     def _dump_heap(self):
         'Dump the internal heap of the executable.'
-
         # Get the internal heap address of the form caption
         # This is done with a little undocumented SendMessage magic
         heap_addr = u.SendMessageW(self.hwnd, VBM_WINDOWTITLEADDR, None, None)

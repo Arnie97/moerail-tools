@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 
 import sys
+import os.path
 import builtins
 from typing import Callable
 
@@ -57,6 +58,12 @@ def shell(ns=None, banner=None):
         if banner is not None:
             params['banner1'] = banner
         return IPython.embed(**params)
+
+
+def module_dir(path='') -> str:
+    'Return the location of this module, and append the path to it if given.'
+    here = os.path.abspath(os.path.dirname(__file__))
+    return os.path.join(here, path)
 
 
 def argv(n: int, default='') -> str:

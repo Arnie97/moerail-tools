@@ -1,11 +1,10 @@
 #!/usr/bin/env python3
 
 import json
-import sys
 from typing import Iterable, Tuple
 
-from interact import shell
-path = sys.argv[1] if len(sys.argv) > 1 else 'train_list.js'
+from interact import shell, argv
+path = argv(1) or 'train_list.js'
 
 
 def decompose(s):

@@ -6,6 +6,7 @@ from typing import Iterable, List, TextIO
 
 from shot import Automation
 from trains import load_trains, decompose, path
+from interact import argv
 
 
 def mkdir(path: str):
@@ -55,7 +56,7 @@ if __name__ == '__main__':
         codes = unique_trains(f)
     time.sleep(5)
 
-    img_dir = 'img'
+    img_dir = argv(3) or 'img'
     mkdir(img_dir)
-    with open('result.txt', 'w') as f:
+    with open(argv(2) or 'models.txt', 'w') as f:
         batch_query(codes, img_dir, f)

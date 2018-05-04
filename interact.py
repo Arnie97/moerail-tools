@@ -58,5 +58,10 @@ def shell(ns=None, banner=None):
         return IPython.embed(**params)
 
 
+def argv(n: int, default='') -> str:
+    'Return the n-th command-line argument if it exists, or default otherwise.'
+    return sys.argv[n] if len(sys.argv) > n else default
+
+
 if __name__ == '__main__':
     shell()

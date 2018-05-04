@@ -1,8 +1,9 @@
 #!/usr/bin/env python3
 
-import sys
 import re
 import json
+
+from interact import argv
 
 
 def main(src, dest):
@@ -30,4 +31,4 @@ def main(src, dest):
 
 
 if __name__ == '__main__':
-    main(*sys.argv[1:])
+    main(argv(1) or 'models.txt', argv(2) or 'models.json')

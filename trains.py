@@ -13,9 +13,9 @@ def decompose(s):
     # G1234(Station A-Station B)
     return s.translate({
         ord(k): v for k, v in {
-            '(': ' ', '-': ' ', ')': ''
+            '(': '|', '-': '|', ')': ''
         }.items()
-    }).split()
+    }).split('|')
 
 
 def load_trains(script: str) -> dict:

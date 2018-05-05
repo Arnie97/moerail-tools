@@ -13,7 +13,8 @@ def sql_shell(tables: Dict[str, Sequence[Sequence]], banner=None):
         sql_shell_init(data, headers, name)
     if banner is not None:
         print(banner)
-    repl(sql_shell_handler)
+    sql_shell.buffer = ''
+    repl(sql_shell_handler, '--> ')
 
 
 def sql_shell_init(data: Iterable[Sequence], headers: Sequence, table: str):
@@ -31,11 +32,17 @@ def sql_shell_init(data: Iterable[Sequence], headers: Sequence, table: str):
 
 def sql_shell_handler(line: str):
     'Execute the SQL statement and print the results.'
-    line = line.strip()
+    sql_shell.buffer += line + '\n'
     try:
+        assert sqlite3.complete_statement(sql_shell.buffer)
         cursor = conn.cursor()
-        cursor.execute(line)
+        cursor.execute(sql_shell.buffer)
         for row in cursor.fetchall():
             print(row)
+    except AssertionError:
+        return '... '
     except sqlite3.Error as e:
         print(e)
+
+    sql_shell.buffer = ''
+    return '--> '

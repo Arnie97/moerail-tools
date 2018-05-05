@@ -18,8 +18,7 @@ def repl(handler: Callable, prompt='> '):
         import readline
         from stations import path, load_stations
         with open(path) as f:
-            global names
-            names = [s[1] for s in load_stations(f.read())]
+            suggestions.list = [s[1] for s in load_stations(f.read())]
 
     except (ImportError, FileNotFoundError):
         pass
@@ -30,7 +29,7 @@ def repl(handler: Callable, prompt='> '):
 
     while True:
         try:
-            handler(input(prompt).strip())
+            prompt = handler(input(prompt).strip()) or prompt
         except (KeyboardInterrupt, EOFError):
             print()
             break
@@ -41,7 +40,7 @@ def suggestions(text: str, state: int):
     text = text.strip()
     if not text:
         return
-    p = [i for i in names if i.startswith(text)]
+    p = [i for i in suggestions.list if i.startswith(text)]
     if state < len(p):
         return p[state]
 

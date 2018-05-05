@@ -85,26 +85,28 @@
         - 输入：
             ```python
             from collections import Counter
-            Counter(i[2] for i in t).most_common(10)
+            distinct_trains = {i[0]: i[2] for i in t}
+            Counter(distinct_trains.values()).most_common(10)
             ```
             ```sql
-            SELECT c, COUNT(*) AS n FROM t
+            SELECT c, COUNT(*) AS n
+            FROM (SELECT DISTINCT a, c FROM t)
             GROUP BY c
             ORDER BY n DESC
             LIMIT 10;
             ```
         - 输出：
             ```python
-            ('上海虹桥', 465)
-            ('广州南', 459)
-            ('上海', 316)
-            ('北京西', 255)
-            ('北京南', 245)
-            ('西安北', 227)
-            ('成都东', 207)
-            ('北京', 200)
-            ('深圳北', 198)
-            ('武汉', 181)
+            ('广州南', 384)
+            ('上海虹桥', 335)
+            ('北京西', 242)
+            ('北京南', 242)
+            ('上海', 193)
+            ('深圳北', 187)
+            ('西安北', 180)
+            ('北京', 175)
+            ('成都东', 161)
+            ('武汉', 132)
             ```
     - 数据来自[车次查询](https://kyfw.12306.cn/otn/queryTrainInfo/init)页面中的 [train_list.js](https://kyfw.12306.cn/otn/resources/js/query/train_list.js)。
 

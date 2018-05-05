@@ -38,7 +38,9 @@
             sorted(s, key=lambda i: len(i[1]))[0]
             ```
             ```sql
-            SELECT * FROM s ORDER BY LENGTH(b) ASC LIMIT 1;
+            SELECT * FROM s
+            ORDER BY LENGTH(b) ASC
+            LIMIT 1;
             ```
         - 输出：
             ```python
@@ -78,6 +80,31 @@
         - 输出：
             ```python
             {'Z73', 'Z74', 'Z83', 'Z84'}
+            ```
+    - 示例：哪十座车站的始发车次最多？
+        - 输入：
+            ```python
+            from collections import Counter
+            Counter(i[2] for i in t).most_common(10)
+            ```
+            ```sql
+            SELECT c, COUNT(*) AS n FROM t
+            GROUP BY c
+            ORDER BY n DESC
+            LIMIT 10;
+            ```
+        - 输出：
+            ```python
+            ('上海虹桥', 465)
+            ('广州南', 459)
+            ('上海', 316)
+            ('北京西', 255)
+            ('北京南', 245)
+            ('西安北', 227)
+            ('成都东', 207)
+            ('北京', 200)
+            ('深圳北', 198)
+            ('武汉', 181)
             ```
     - 数据来自[车次查询](https://kyfw.12306.cn/otn/queryTrainInfo/init)页面中的 [train_list.js](https://kyfw.12306.cn/otn/resources/js/query/train_list.js)。
 

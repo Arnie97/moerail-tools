@@ -33,16 +33,17 @@ def sql_shell_init(data: Iterable[Sequence], headers: Sequence, table: str):
 def sql_shell_handler(line: str):
     'Execute the SQL statement and print the results.'
     sql_shell.buffer += line + '\n'
+    if not sqlite3.complete_statement(sql_shell.buffer):
+        return '... '
+
     try:
-        assert sqlite3.complete_statement(sql_shell.buffer)
         cursor = conn.cursor()
         cursor.execute(sql_shell.buffer)
-        for row in cursor.fetchall():
-            print(row)
-    except AssertionError:
-        return '... '
     except sqlite3.Error as e:
         print(e)
-
-    sql_shell.buffer = ''
-    return '--> '
+    else:
+        for row in cursor.fetchall():
+            print(row)
+    finally:
+        sql_shell.buffer = ''
+        return '--> '

@@ -3,6 +3,7 @@
 import json
 from typing import Iterable, Tuple
 
+from sql import sql_shell
 from util import shell, argv, open
 path = argv(1) or 'train_list.js'
 
@@ -39,4 +40,6 @@ if __name__ == '__main__':
         data = load_trains(f.read())
         t = list(set(parse_trains(data)))
     print('Ready.')
-    shell({'t': t}, 'len(t) == %d.' % len(t))
+
+    for interpreter in shell, sql_shell:
+        interpreter({'t': t}, 'len(t) == %d.' % len(t))

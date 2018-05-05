@@ -29,10 +29,21 @@
     - 输出结果已通过[铁路信息查询](https://moerail.ml)网站呈现。
     - 输出结果的格式与 12306 网站提供的 `station_name.js` 相同，即以 `@` `|` 作为分隔符。
 
-* `stations.py` 启动一个 Python Shell，用于交互式查询上述 `station_name.js`（以及其他类似格式的文件）。
+* `stations.py` 启动一个 Shell，用于交互式查询上述 `station_name.js`（以及其他类似格式的文件）。
+    - 启动后首先会进入 Python 解释器，退出该解释器后则会进入 SQLite 解释器。
+    - 由于 SQL 中不能用编号代指字段，因此表中各字段依次用 A 至 Z 的字母命名。
     - 示例：中国铁路名字最短的车站是？
-        - 输入：`sorted(s, key=lambda i: len(i[1]))[0]`
-        - 输出：`['son', '宋', 'SOB', '57368', '']`
+        - 输入：
+            ```python
+            sorted(s, key=lambda i: len(i[1]))[0]
+            ```
+            ```sql
+            SELECT * FROM s ORDER BY LENGTH(b) ASC LIMIT 1;
+            ```
+        - 输出：
+            ```python
+            ('son', '宋', 'SOB', '57368', '')
+            ```
     - 思考题：请模仿[港铁的站名拼词](https://zh.wikipedia.org/zh-cn/港鐵文化#站名拼詞)。
         ```
         　利国
@@ -53,10 +64,21 @@
 与[上一节](#车站信息查询)相同。
 
 #### 组件介绍
-* `trains.py` 启动一个 Python Shell，用于交互式查询 `train_list.js` 中记录的车次。
+* `trains.py` 启动一个 Shell，用于交互式查询 `train_list.js` 中记录的车次。
     - 示例：Z1 到 Z100 的一百个车次中，哪些车次目前闲置？
-        - 输入：`{'Z%d' % i for i in range(1, 101)}.difference(i[1] for i in t)`
-        - 输出：`{'Z73', 'Z74', 'Z83', 'Z84'}`
+        - 输入：
+            ```python
+            {'Z%d' % i for i in range(1, 101)}.difference(i[1] for i in t)
+            ```
+            ```sql
+            WITH range AS (SELECT 1 i UNION SELECT i + 1 FROM range WHERE i < 100)
+            SELECT 'Z' || i FROM range
+            EXCEPT SELECT b FROM t;
+            ```
+        - 输出：
+            ```python
+            {'Z73', 'Z74', 'Z83', 'Z84'}
+            ```
     - 数据来自[车次查询](https://kyfw.12306.cn/otn/queryTrainInfo/init)页面中的 [train_list.js](https://kyfw.12306.cn/otn/resources/js/query/train_list.js)。
 
 * `otp.py` 交互式查询某车次的正晚点信息。

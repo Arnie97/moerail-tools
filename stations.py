@@ -2,6 +2,7 @@
 
 from typing import Iterable, List
 
+from sql import sql_shell
 from util import shell, argv, open
 path = argv(1) or 'station_name.js'
 
@@ -25,7 +26,8 @@ if __name__ == '__main__':
     with open(path) as f:
         s = list(load_stations(f.read()))
 
-    shell({'s': s}, 'len(s) == %d.' % len(s))
+    for interpreter in shell, sql_shell:
+        interpreter({'s': s}, 'len(s) == %d.' % len(s))
 
     with open(path, 'w') as f:
         print(dump_stations(s), file=f)

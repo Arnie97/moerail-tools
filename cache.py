@@ -32,7 +32,8 @@ def unique_trains(file: TextIO) -> List[str]:
     'Return unique and sorted list of train codes.'
     print('Loading...')
     data = load_trains(file.read())
-    codes = sorted(set(emu_codes(data)))
+    codes = set(emu_codes(data))
+    codes = sorted(codes, key=lambda code: ord(code[0]) * 1e4 + int(code[1:]))
     print('Ready, %d trains to be checked.' % len(codes))
     return codes
 

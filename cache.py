@@ -54,9 +54,9 @@ if __name__ == '__main__':
     me = Automation()
     with open(path) as f:
         codes = unique_trains(f)
-    time.sleep(5)
-
     img_dir = argv(3) or 'img'
     mkdir(img_dir)
+    time.sleep(5)
+
     with open(argv(2) or 'models.txt', 'w') as f:
         batch_query(me, codes, img_dir, f)

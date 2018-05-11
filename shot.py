@@ -33,7 +33,7 @@ class Automation():
         u.SetForegroundWindow(self.hwnd)
         u.SendMessageW(self.htext, WM_SETTEXT, None, train)
         u.PostMessageW(self.hbutton, BM_CLICK, None, None)
-        time.sleep(0.5)
+        time.sleep(1.5)
 
         # close a possible message box
         hmsg = find_window('#32770')

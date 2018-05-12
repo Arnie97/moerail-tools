@@ -2,6 +2,8 @@
 // @name        动车组交路查询
 // @description 在 12306 订票页面上显示动车组型号与交路
 // @author      Arnie97
+// @version     2018.05.12
+// @license     MIT
 // @namespace   https://github.com/Arnie97
 // @homepageURL https://github.com/Arnie97/emu-tools
 // @match       https://kyfw.12306.cn/otn/leftTicket/init
@@ -10,9 +12,7 @@
 // @match       https://kyfw.12306.cn/otn/czxx/init
 // @icon        https://moerail.ml/favicon.ico
 // @connect     moerail.ml
-// @grant       GM_xmlhttpRequest
-// @grant       GM_addStyle
-// @version     2018.03.16
+// @grant       none
 // ==/UserScript==
 
 // Attempt to infer the model of the trains from these rules
@@ -101,20 +101,26 @@ function checkPage() {
     }));
 }
 
+// Append <style> blocks to the document <head>
+function addStyle(css) {
+    return $('<style>').attr('type', 'text/css').text(css).appendTo('head');
+}
+
 // Register the event listener
-function main(dom) {
-    models = JSON.parse(dom.responseText);
+function main(json_object) {
+    addStyle(stylesheet);
+    models = json_object;
     checkPage();
     var observer = new MutationObserver(checkPage);
     observer.observe($('.t-list>table')[0], {childList: true});
 }
 
-GM_xmlhttpRequest({
-    method: 'GET',
-    url: 'https://moerail.ml/models.json',
-    onload: main
-});
-GM_addStyle('\
+// Confirm the host name for Android client compatibility
+if (location.host == 'kyfw.12306.cn') {
+    $.getJSON('https://moerail.ml/models.json', main);
+}
+
+var stylesheet = ('\
     .ls {                           \
         width: 120px !important;    \
     }                               \

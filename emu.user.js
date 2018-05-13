@@ -59,8 +59,11 @@ function showTrainModel(i, obj) {
         var url = 'https://moerail.ml/img/' + code + '.png';
         var img = $('<img>');
         var node = $('<a>').addClass('route').text(model[0]).append(img);
-        node.click(function(event) {
+        node.mouseenter(function(event) {
             img.attr('src') || img.attr('src', url);
+        });
+        node.click(function(event) {
+            node.mouseenter();
             img.toggle();
         });
     } else {

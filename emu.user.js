@@ -15,17 +15,6 @@
 // @grant       none
 // ==/UserScript==
 
-// Attempt to infer the model of the trains from these rules
-var patterns = {
-    'CRH1A-A型': /D7(1|2[01]|3)/,
-    'CRH2A型': /C5[0356]/,
-    'CRH5A型': /C(13|50)/,
-    'CRH5G/2G型': /C85/,
-    'CRH6A型': /C7[679]|S1/,
-    'CRH6F型': /C(69|78)|D75[6-8]/,
-    'NDJ3型': /S[25]/
-};
-
 // Search the database
 function getTrainModel(code) {
     if ('GDCS'.indexOf(code[0]) == -1) {
@@ -55,12 +44,6 @@ function getIntercityTrainModel(code, obj) {
             return ['CR400AF/BF型'];
         } else if (coach_class.id.match(/^TZ_/)) {  // Premier Coach
             return ['CRH3C型'];
-        }
-    } else if (code.match(/C29/)) {  // Zhengzhou
-        if (coach_class.firstChild.textContent === '--') {
-            return ['CRH6A型'];
-        } else if (coach_class.id.match(/^SWZ_/)) {
-            return ['CRH380A统型'];
         }
     }
 }
@@ -113,6 +96,8 @@ function addStyle(css) {
 function main(json_object) {
     addStyle(stylesheet);
     models = json_object;
+    patterns = models[':'] || {};
+    delete models[':'];
     checkPage();
     var observer = new MutationObserver(checkPage);
     observer.observe($('.t-list>table')[0], {childList: true});

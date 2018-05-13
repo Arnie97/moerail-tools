@@ -1,7 +1,9 @@
 #!/usr/bin/env python3
 
+import os
 import re
 import json
+from pprint import pprint
 from typing import Dict, TextIO
 
 from util import argv, open
@@ -27,10 +29,18 @@ def group(file: TextIO) -> Dict[str, list]:
 
 
 def main(src, dest):
+    'Append train models to the existing JSON file.'
     with open(src) as f:
         lst = group(f)
     print('\n'.join(sorted(lst.keys())))
     print(len(lst), 'models found.')
+
+    if os.path.isfile(dest):
+        with open(dest) as f:
+            existing = json.load(f)
+            pprint(existing)
+            lst.update(existing)
+
     with open(dest, 'w') as f:
         json.dump(lst, f)
 

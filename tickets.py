@@ -58,10 +58,33 @@ class API:
         'Check whether the CAPTCHA answers are correct.'
         response = self.fetch(
             'passport/captcha/captcha-check',
-            method='POST', params='captcha', data=dict(answer=coordinates),
+            params='captcha', data=dict(answer=coordinates),
         )
         assert response.result_code == '4', response.result_message
         print(response.result_message)
+
+    def login(self, **credentials):
+        response = self.fetch(
+            'passport/web/login',
+            params='otn', data=credentials,
+        )
+        assert not response.result_code, response.result_message
+        print(response.result_message)
+
+        self.fetch('otn/login/userLogin', 'att', json=False)
+
+        response = self.fetch('passport/web/auth/uamtk', 'otn')
+        assert not response.result_code, response.result_message
+        print(response.result_message)
+
+        response = self.fetch(
+            'otn/uamauthclient',
+            data=dict(tk=response.newapptk)
+        )
+        assert not response.result_code, response.result_message
+        print('%s: %s' % (response.username, response.result_message))
+
+        self.fetch('otn/index/initMy12306', method='GET', json=False)
 
 
 def show_image(file: BinaryIO):
@@ -84,6 +107,7 @@ def main():
     x.show_captcha()
     coordinates = x.input_captcha()
     x.check_captcha(coordinates)
+    x.login(username=input('Login: '), password=input('Password: '))
 
 
 if __name__ == '__main__':

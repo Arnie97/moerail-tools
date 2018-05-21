@@ -15,5 +15,11 @@
         "login_site": "E",
         "module": "login",
         "rand": "sjrand"
+    },
+    "otn": {
+        "appid": "otn"
+    },
+    "att": {
+        "_json_att": ""
     }
 }

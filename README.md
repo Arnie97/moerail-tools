@@ -7,6 +7,7 @@
 * 各联网访问 API 的组件均依赖 [requests](http://docs.python-requests.org)。
 * 如果你的 Python 版本低于 Python 3.5，则需安装标准库中新增的 [typing](https://pypi.python.org/pypi/typing)。
 * 可选装 [IPython](https://ipython.org) 来增强交互式终端的易用性。
+* `provinces.py` 依赖 [mwclient](https://mwclient.readthedocs.io) 来读取维基百科上的条目。
 
 #### 组件介绍
 * `hyfw.py` 交互式查询车站的电报码、TMIS 代码、所属省级行政区等。
@@ -22,12 +23,14 @@
     - 请输入汉字站名，匹配方式为前方一致。
         - 示例输入：`津沪`
         - 示例输出：`津沪所	10348`
-    - 数据来自[货运营业站服务信息查询](http://hyfw.12306.cn/hyinfo/action/FwcszsAction_index?type=1)页面，该接口的亮点在于可以查到线路所及不办货车站的代码。感谢维基人 [N509FZ](https://zh.wikipedia.org/wiki/User:N509FZ/线路所) 指出此接口。
+    - 数据来自[货运营业站服务信息查询](http://hyfw.12306.cn/hyinfo/action/FwcszsAction_index?type=1)页面，该接口的亮点在于可以查到线路所及不办货车站的代码。感谢维基人 [N509FZ](https://zh.wikipedia.org/zh-cn/User:N509FZ/线路所) 指出此接口。
 
 * `dump.py` 从以上三个接口分别读取数据，合并重复数据，并保存于本地的 `station_name.js`。
     - 发生合并冲突时，会弹出 Python Shell，以便用户准确解决。
     - 输出结果已通过[铁路信息查询](https://moerail.ml)网站呈现。
     - 输出结果的格式与 12306 网站提供的 `station_name.js` 相同，即以 `@` `|` 作为分隔符。
+
+* `provinces.py` 读取中文维基百科[各车站条目中的信息框](https://zh.wikipedia.org/zh-cn/Template:Infobox_China_railway_station)，查询车站所属的省级行政区，以填补 `station_name.js` 中的对应字段。
 
 * `stations.py` 启动一个 Shell，用于交互式查询上述 `station_name.js`（以及其他类似格式的文件）。
     - 启动后首先会进入 Python 解释器，退出该解释器后则会进入 SQLite 解释器。
@@ -44,7 +47,7 @@
             ```
         - 输出：
             ```python
-            ('son', '宋', 'SOB', '57368', '')
+            ('son', '宋', 'SOB', '57368', '黑')
             ```
     - 思考题：请模仿[港铁的站名拼词](https://zh.wikipedia.org/zh-cn/港鐵文化#站名拼詞)。
         ```

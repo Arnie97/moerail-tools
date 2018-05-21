@@ -6,6 +6,12 @@ import builtins
 from typing import Callable
 
 
+class AttrDict(dict):
+    'Make the keys accessible via attributes.'
+    __getattr__ = dict.__getitem__
+    __setattr__ = dict.__setitem__
+
+
 def progress(dot='.', file=sys.stdout):
     'Print a progress bar.'
     file.write(dot)

@@ -6,13 +6,7 @@ import kyfw
 import hyfw
 import tmis
 from stations import path, dump_stations
-from util import shell, progress, open
-
-
-class AttrDict(dict):
-    'Make the keys accessible via attributes.'
-    __getattr__ = dict.__getitem__
-    __setattr__ = dict.__setitem__
+from util import shell, progress, open, AttrDict
 
 
 def combine_stations() -> Iterable[List[str]]:

@@ -3,13 +3,14 @@
 import sys
 import os.path
 import builtins
+from collections import OrderedDict
 from typing import Callable
 
 
-class AttrDict(dict):
+class AttrDict(OrderedDict):
     'Make the keys accessible via attributes.'
-    __getattr__ = dict.__getitem__
-    __setattr__ = dict.__setitem__
+    __getattr__ = OrderedDict.__getitem__
+    __setattr__ = OrderedDict.__setitem__
 
 
 def progress(dot='.', file=sys.stdout):

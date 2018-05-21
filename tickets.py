@@ -1,12 +1,14 @@
 #!/usr/bin/env python3
 
+import datetime
 import io
 import json
 import requests
 from string import digits
 from typing import BinaryIO
 
-from util import argv, open, AttrDict
+from util import argv, open, shell, AttrDict
+today = datetime.date.today().isoformat()
 
 
 class API:
@@ -18,15 +20,29 @@ class API:
         self.session.headers = params.pop('headers')
         self.params = params
 
-    def fetch(self, path, params, method, json=True, **kwargs):
+    def fetch(self, path, params=None, method='POST', json=True, **kwargs):
         'Initiate an API request.'
         url = self.site_root + path
-        params = self.params.get(params, params)
+        if not isinstance(params, dict):
+            params = self.params.get(params, {})
         query = 'params' if method == 'GET' else 'data'
         params.update(kwargs.get(query, {}))
         kwargs[query] = params
         response = self.session.request(method, url, **kwargs)
         return AttrDict(response.json()) if json else response
+
+    def query(self, depart: str, arrive: str, date=today, student=False):
+        'List trains between two stations.'
+        response = self.fetch(
+            'otn/leftTicket/query',
+            method='GET', params=AttrDict([
+                ('leftTicketDTO.train_date', date),
+                ('leftTicketDTO.from_station', depart),
+                ('leftTicketDTO.to_station', arrive),
+                ('purpose_codes', '0x00' if student else 'ADULT')
+            ])
+        )
+        return [train.split('|') for train in response.data['result']]
 
     def show_captcha(self):
         'Show the CAPTCHA image.'
@@ -104,6 +120,10 @@ def main():
     'The entrypoint.'
     with open(argv(1) or 'tickets.json') as f:
         x = API(json.load(f))
+
+    t = x.query('BJP', 'SHH')
+    shell({'t': t}, 'len(t) == %d.' % len(t))
+
     x.show_captcha()
     coordinates = x.input_captcha()
     x.check_captcha(coordinates)

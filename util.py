@@ -76,8 +76,10 @@ def argv(n: int, default='') -> str:
     return sys.argv[n] if len(sys.argv) > n else default
 
 
-def open(file, mode='r', buffering=-1, encoding='utf-8', *args, **kwargs):
+def open(file, mode='r', buffering=-1, encoding=None, *args, **kwargs):
     'Open text files as UTF-8 by default.'
+    if 'b' not in mode and encoding is None:
+        encoding = 'utf-8'
     return builtins.open(file, mode, buffering, encoding, *args, **kwargs)
 
 

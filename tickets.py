@@ -4,7 +4,7 @@ import io
 import json
 import requests
 from string import digits
-from PIL import Image
+from typing import BinaryIO
 
 from util import argv, open, AttrDict
 
@@ -34,7 +34,7 @@ class API:
             'passport/captcha/captcha-image',
             method='GET', params='captcha', json=False,
         )
-        Image.open(io.BytesIO(response.content)).show()
+        show_image(io.BytesIO(response.content))
         layout = '''
             -----------------
             | 0 | 1 | 2 | 3 |
@@ -62,6 +62,19 @@ class API:
         )
         assert response.result_code == '4', response.result_message
         print(response.result_message)
+
+
+def show_image(file: BinaryIO):
+    'Save the image to a file if Pillow is not installed.'
+    try:
+        from PIL import Image
+    except ImportError:
+        img_path = argv(2) or 'captcha.jpg'
+        with open(img_path, 'wb') as f:
+            f.write(file.read())
+        print('Open the image "%s" to solve the CAPTCHA.' % img_path)
+    else:
+        Image.open(file).show()
 
 
 def main():

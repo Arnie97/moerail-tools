@@ -3,9 +3,11 @@
 import datetime
 import io
 import json
+import re
 import requests
 from string import digits
-from typing import BinaryIO
+from typing import BinaryIO, Iterable, Tuple
+from urllib.parse import unquote
 
 from util import argv, open, shell, AttrDict
 today = datetime.date.today().isoformat()
@@ -61,7 +63,7 @@ class API:
         for line in layout.split('\n'):
             print(line.strip())
 
-    def input_captcha(self):
+    def input_captcha(self) -> str:
         'Convert the area IDs to coordinates.'
         coordinates = '''
             30,41 110,44 180,43 260,42
@@ -80,6 +82,7 @@ class API:
         print(response.result_message)
 
     def login(self, **credentials):
+        'Sign in to your 12306 account.'
         response = self.fetch(
             'passport/web/login',
             params='otn', data=credentials,
@@ -95,12 +98,57 @@ class API:
 
         response = self.fetch(
             'otn/uamauthclient',
-            data=dict(tk=response.newapptk)
+            data=dict(tk=response.newapptk),
         )
         assert not response.result_code, response.result_message
         print('%s: %s' % (response.username, response.result_message))
 
         self.fetch('otn/index/initMy12306', method='GET', json=False)
+
+    def is_logged_in(self) -> bool:
+        'Check whether the user is logged in.'
+        response = self.fetch('otn/login/checkUser', 'att')
+        return response['data']['flag']
+
+    def request_order(self, secret: str) -> Tuple[dict, dict]:
+        'Request for order.'
+        assert self.is_logged_in()
+        self.fetch(
+            'otn/leftTicket/submitOrderRequest', data=AttrDict([
+                ('secretStr', unquote(secret)),
+                ('train_date', None),
+                ('back_train_date', None),
+                ('tour_flag', 'dc'),
+                ('purpose_codes', '0x00' if False else 'ADULT'),
+                ('query_from_station_name', None),
+                ('query_to_station_name', None),
+                ('undefined', ''),
+            ])
+        )
+        response = self.fetch('otn/confirmPassenger/initDc', 'att', json=False)
+        ticket_info_pattern = re.compile('ticketInfoForPassengerForm=(.*?);')
+        ticket_info_json = ticket_info_pattern.search(response.text).group(1)
+        ticket_info = json.loads(ticket_info_json.replace("'", '"'))
+
+        token_pattern = re.compile("globalRepeatSubmitToken = '(.*?)'")
+        token = token_pattern.search(response.text).group(1)
+        return ticket_info, {'REPEAT_SUBMIT_TOKEN': token}
+
+    def left_tickets(self, secret: str) -> Iterable[Tuple[str, str]]:
+        'Get the count of remaining train tickets for each coach class.'
+        ticket_info, token = self.request_order(secret)
+        for k, v in ticket_info['queryLeftNewDetailDTO'].items():
+            if k.endswith('_num') and int(v) >= 0:
+                yield k[:-4], int(v)
+
+    def list_passengers(self, token={}) -> dict:
+        'List the available passengers in your 12306 account.'
+        assert self.is_logged_in()
+        response = self.fetch(
+            'otn/confirmPassenger/getPassengerDTOs',
+            params='att', data=token,
+        )
+        return response.data['normal_passengers']
 
 
 def show_image(file: BinaryIO):
@@ -121,13 +169,14 @@ def main():
     with open(argv(1) or 'tickets.json') as f:
         x = API(json.load(f))
 
-    t = x.query('BJP', 'SHH')
-    shell({'t': t}, 'len(t) == %d.' % len(t))
-
     x.show_captcha()
     coordinates = x.input_captcha()
     x.check_captcha(coordinates)
     x.login(username=input('Login: '), password=input('Password: '))
+
+    Z53 = x.query('SJP', 'WCN')[-1]
+    print(dict(x.left_tickets(Z53[0])))
+    shell(vars())
 
 
 if __name__ == '__main__':

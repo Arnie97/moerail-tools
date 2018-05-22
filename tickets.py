@@ -100,22 +100,21 @@ class API:
         )
         assert not response.result_code, response.result_message
         print(response.result_message)
+        self.get_auth_token()
+        self.save_cookies()
 
-        self.fetch('otn/login/userLogin', 'att', json=False)
-
+    def get_auth_token(self):
+        'Get the user authentication tokens in cookies.'
         response = self.fetch('passport/web/auth/uamtk', 'otn')
         assert not response.result_code, response.result_message
         print(response.result_message)
 
-        response = self.fetch(
-            'otn/uamauthclient',
-            data=dict(tk=response.newapptk),
-        )
+        response = self.fetch('otn/uamauthclient', {'tk': response.newapptk})
         assert not response.result_code, response.result_message
         print('%s: %s' % (response.username, response.result_message))
 
-        # save the cookies
-        self.fetch('otn/index/initMy12306', method='GET', json=False)
+    def save_cookies(self):
+        'Save the cookies in a JSON file.'
         if not self.persist:
             return
         with open(self.persist, 'w') as f:

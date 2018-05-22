@@ -108,22 +108,16 @@ class API:
     def is_logged_in(self) -> bool:
         'Check whether the user is logged in.'
         response = self.fetch('otn/login/checkUser', 'att')
-        return response['data']['flag']
+        return response.data['flag']
 
     def request_order(self, secret: str) -> Tuple[dict, dict]:
         'Request for order.'
         assert self.is_logged_in()
         self.fetch(
-            'otn/leftTicket/submitOrderRequest', data=AttrDict([
-                ('secretStr', unquote(secret)),
-                ('train_date', None),
-                ('back_train_date', None),
-                ('tour_flag', 'dc'),
-                ('purpose_codes', '0x00' if False else 'ADULT'),
-                ('query_from_station_name', None),
-                ('query_to_station_name', None),
-                ('undefined', ''),
-            ])
+            'otn/leftTicket/submitOrderRequest', data={
+                'secretStr': unquote(secret),
+                'tour_flag': 'dc',
+            }
         )
         response = self.fetch('otn/confirmPassenger/initDc', 'att', json=False)
         ticket_info_pattern = re.compile('ticketInfoForPassengerForm=(.*?);')

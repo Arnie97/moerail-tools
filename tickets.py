@@ -3,28 +3,39 @@
 import datetime
 import io
 import json
+import os.path
 import re
 import requests
 from string import digits
 from typing import BinaryIO, Iterable, Tuple
 from urllib.parse import unquote
 
-from util import argv, open, shell, AttrDict
+from util import argv, module_dir, open, shell, AttrDict
 today = datetime.date.today().isoformat()
 
 
 class API:
+    'https://kyfw.12306.cn/'
 
-    def __init__(self, params: dict):
+    def __init__(self, params='tickets.json', persist='cookies.json'):
         'Initialize the session.'
-        self.site_root = 'https://kyfw.12306.cn/'
+        # load the headers
         self.session = requests.Session()
-        self.session.headers = params.pop('headers')
-        self.params = params
+        with open(module_dir(params)) as f:
+            self.params = json.load(f)
+        self.session.headers = self.params.pop('headers')
+
+        # load the cookies
+        self.persist = persist and module_dir(persist)
+        if not persist or not os.path.exists(self.persist):
+            return
+        with open(self.persist) as f:
+            cj = requests.utils.cookiejar_from_dict(json.load(f))
+            self.session.cookies = cj
 
     def fetch(self, path, params=None, method='POST', json=True, **kwargs):
         'Initiate an API request.'
-        url = self.site_root + path
+        url = self.__doc__ + path
         if not isinstance(params, dict):
             params = self.params.get(params, {})
         query = 'params' if method == 'GET' else 'data'
@@ -103,7 +114,13 @@ class API:
         assert not response.result_code, response.result_message
         print('%s: %s' % (response.username, response.result_message))
 
+        # save the cookies
         self.fetch('otn/index/initMy12306', method='GET', json=False)
+        if not self.persist:
+            return
+        with open(self.persist, 'w') as f:
+            cj = requests.utils.dict_from_cookiejar(self.session.cookies)
+            json.dump(cj, f)
 
     def is_logged_in(self) -> bool:
         'Check whether the user is logged in.'
@@ -160,13 +177,14 @@ def show_image(file: BinaryIO):
 
 def main():
     'The entrypoint.'
-    with open(argv(1) or 'tickets.json') as f:
-        x = API(json.load(f))
-
-    x.show_captcha()
-    coordinates = x.input_captcha()
-    x.check_captcha(coordinates)
-    x.login(username=input('Login: '), password=input('Password: '))
+    x = API()
+    if x.is_logged_in():
+        print('Already logged in.')
+    else:
+        x.show_captcha()
+        coordinates = x.input_captcha()
+        x.check_captcha(coordinates)
+        x.login(username=input('Login: '), password=input('Password: '))
 
     Z53 = x.query('SJP', 'WCN')[-1]
     print(dict(x.left_tickets(Z53[0])))

@@ -46,16 +46,37 @@ class Tracking(API):
         return AttrDict(response.object[0])
 
     def repl_handler(self, line: str):
-        'Format the query results.'
+        'Catch the exceptions and print the error messages.'
         try:
             car_info = self.track_car(line.strip())
         except AssertionError as e:
             print(e)
         else:
-            for k, v in car_info.items():
-                if v:
-                    print(k, ': ', v, sep='')
+            print(self.explain(car_info))
             print()
+
+    @staticmethod
+    def explain(info: AttrDict) -> str:
+        'Format the query results.'
+        info.arrDep = dict(A='到达', D='离开').get(info.arrDepId, '')
+        if not info.carKind.endswith('车'):
+            info.carKind += '车'
+
+        explanation = '''
+        截至 {eventDate} 时为止，
+        您查询的{conName}所属的 {carNo} 号 {carType} 型{carKind}已被编入
+        由{cdyAdm}{cdyStation}站开往{destAdm}{destStation}站
+        的 {trainId} 次货物列车机后 {trainOrder} 位，
+        负责运送编号为 {wbID} 的{cdyName}。该列车现已{arrDep}
+        位于{eventProvince}{eventCity}的{eventAdm}{eventStation}站，
+        距离终点站{destStation}站还有 {dzlc} km。
+        '''
+        return strip_lines(explanation).format(**info)
+
+
+def strip_lines(text: str, sep='') -> str:
+    'Remove leading and trailing whitespace from each line in the text.'
+    return sep.join(line.strip() for line in text.split('\n'))
 
 
 def auth():

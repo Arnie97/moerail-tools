@@ -2,6 +2,7 @@
 
 import sys
 import os.path
+import string
 import builtins
 from collections import OrderedDict
 from typing import Callable
@@ -11,6 +12,25 @@ class AttrDict(OrderedDict):
     'Make the keys accessible via attributes.'
     __getattr__ = OrderedDict.__getitem__
     __setattr__ = OrderedDict.__setitem__
+
+
+class FilterFormatter(string.Formatter):
+    'Return an empty string for values that are interpreted as boolean false.'
+
+    def get_field(self, field_name, args, kwargs):
+        'Return the argument formatted by the format string in the brackets.'
+        first, rest = string._string.formatter_field_name_split(field_name)
+        obj = args[first] if isinstance(first, int) else kwargs.get(first)
+
+        for is_attr, i in rest:
+            if is_attr:
+                obj = getattr(obj, i)
+            elif obj:
+                obj = self.format(i, obj, **kwargs)
+            else:
+                obj = ''
+
+        return obj, first
 
 
 def progress(dot='.', file=sys.stdout):

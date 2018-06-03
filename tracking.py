@@ -4,7 +4,7 @@ import io
 import re
 import requests
 
-from util import repl, AttrDict
+from util import repl, AttrDict, FilterFormatter
 from tickets import show_image, API
 
 
@@ -13,6 +13,7 @@ class Tracking(API):
 
     def __init__(self):
         'Initialize the session.'
+        self.format = FilterFormatter().format
         self.session = requests.Session()
         self.params = {}
         response = self.fetch('hwzzPage.action', method='GET', json=False)
@@ -53,25 +54,42 @@ class Tracking(API):
             print(e)
         else:
             print(self.explain(car_info))
+        finally:
             print()
 
-    @staticmethod
-    def explain(info: AttrDict) -> str:
+    def explain(self, info: AttrDict) -> str:
         'Format the query results.'
-        info.arrDep = dict(A='到达', D='离开').get(info.arrDepId, '')
-        if not info.carKind.endswith('车'):
-            info.carKind += '车'
+        info.arrDep = dict(A='到达', D='离开').get(info.arrDepId, '到达')
+        if not info.wbID:
+            info.wbID = info.wbNbr
+        if info.carType.startswith(info.carKind):
+            info.carKind = '车辆'
+        if info.carLE == 'L':
+            status = '负责运送{wbID[编号为 {} 的]}{cdyName}'
+            if info.cdyName[-1].isdigit():
+                info.cdyName += '类货物'
+        else:
+            status = '当前状态为{cdyName}{wbID[，编号为 {}]}'
+            if info.cdyName.endswith('空'):
+                info.cdyName += '车'
 
         explanation = '''
-        截至 {eventDate} 时为止，
-        您查询的{conName}所属的 {carNo} 号 {carType} 型{carKind}已被编入
-        由{cdyAdm}{cdyStation}站开往{destAdm}{destStation}站
-        的 {trainId} 次货物列车机后 {trainOrder} 位，
-        负责运送编号为 {wbID} 的{cdyName}。该列车现已{arrDep}
-        位于{eventProvince}{eventCity}的{eventAdm}{eventStation}站，
-        距离终点站{destStation}站还有 {dzlc} km。
+        截至 {eventDate} 时为止，您查询的{conName[由{}托运的]}
+        {carNo[ {} 号]}{carType[ {} 型]}{carKind}
+
+        %s已{arrDep}{eventProvince[位于{}{eventCity}的]}
+        {eventAdm}{eventStation}站
+        {dzlc[，距离终点站{destStation}站还有 {} km]}。
         '''
-        return strip_lines(explanation).format(**info)
+
+        explanation %= '''
+        已被编入由{cdyAdm}{cdyStation}站
+        开{destAdm[往{}]}{destStation[{}站]}的
+        {trainId[ {} 次列车]}{train[{}]}机后第 {trainOrder} 位，%s。
+        该列车现
+        ''' % status if int(info.trainOrder) else ''
+
+        return self.format(strip_lines(explanation), **info)
 
 
 def strip_lines(text: str, sep='') -> str:

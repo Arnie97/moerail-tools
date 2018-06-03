@@ -6,7 +6,6 @@ import json
 import os.path
 import re
 import requests
-from string import digits
 from typing import BinaryIO, Iterable, Tuple
 from urllib.parse import unquote
 
@@ -81,7 +80,7 @@ class API:
             35,95 105,98 185,97 255,96
         '''.split()
         answers = input('Please enter the area IDs, for example "604": ')
-        return ','.join(coordinates[int(i)] for i in answers if i in digits)
+        return ','.join(coordinates[int(i)] for i in answers if i.isdigit())
 
     def check_captcha(self, coordinates: str):
         'Check whether the CAPTCHA answers are correct.'

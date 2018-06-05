@@ -97,24 +97,29 @@ def strip_lines(text: str, sep='') -> str:
     return sep.join(line.strip() for line in text.split('\n'))
 
 
+def solve_captcha(captcha_image: io.BytesIO) -> str:
+    'Solve the CAPTCHA image.'
+    from captcha.captcha import image_filter, solve
+    captcha_image = image_filter(captcha_image)
+    template_image = module_dir('captcha/tests/templates/95306.bmp')
+    answer_digits = solve(captcha_image, template_image)
+    return ''.join(map(str, answer_digits))
+
+
 def auth():
-    'Solve the CAPTCHA to get a valid session.'
+    'Load and answer the CAPTCHA to get a valid session.'
     x = Tracking()
     captcha_image = x.load_captcha()
     try:
-        from captcha.captcha import image_filter, solve
-    except ImportError:
-        pass
-    else:
-        captcha_image = image_filter(captcha_image)
-        template_image = module_dir('captcha/tests/templates/95306.bmp')
-        answer_digits = solve(captcha_image, template_image)
-        answer = ''.join(map(str, answer_digits))
+        answer = solve_captcha(captcha_image)
         x.check_captcha(answer)
+    except (ImportError, AssertionError) as e:
+        print(e)
+        show_image(captcha_image)
+    else:
         return x
 
     while True:
-        show_image(captcha_image)
         try:
             x.check_captcha(input('# ').strip())
         except AssertionError as e:

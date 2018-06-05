@@ -4,6 +4,7 @@ import io
 import json
 import re
 import sys
+import time
 from contextlib import redirect_stdout, redirect_stderr
 from subprocess import run, PIPE
 from typing import Iterable, Sequence
@@ -101,6 +102,9 @@ def parse_tracking(context):
                 unknown.append(model)
 
     if numbers or unknown:
+        if limit():
+            bot.send(context, '哼，不理你了!')
+            return
         roger = (
             '、'.join(unknown) + ' 是什么车哦，没见过呢' if unknown
             else '好的，知道了' if models else '好的'
@@ -124,8 +128,32 @@ def batch_tracking(cars: Sequence[str]) -> Iterable[str]:
             yield api.explain(info)
 
 
+class Limit(AttrDict):
+    'Limit the request rate.'
+
+    def __init__(self, rate=2, per=60):
+        allowance = rate  # unit: messages
+        last_check = time.monotonic()
+        self.update(locals())
+
+    def __call__(self) -> bool:
+        now = time.monotonic()
+        self.allowance += (now - self.last_check) / self.per * self.rate
+        self.last_check = now
+        if self.allowance > self.rate:
+            self.allowance = self.rate  # throttle
+        if self.allowance < 1:
+            return True
+        else:
+            self.allowance -= 1
+            return False
+
+
 def main(database: str):
     'Load the known car models.'
+    global limit
+    limit = Limit()
+
     global known_models
     try:
         with open(database) as f:

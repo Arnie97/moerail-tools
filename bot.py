@@ -84,6 +84,11 @@ def parse_shell(context) -> str:
             print('\n-->', eval(context.message[3:]))
         return result.getvalue().strip()
 
+    elif context.message.startswith('//'):
+        limit.power_off = not limit.power_off
+        if limit.power_off:
+            return '下班了，明天见~'
+
     elif context.message_type == 'private':
         return 'Roger'
 
@@ -102,6 +107,9 @@ def parse_tracking(context):
                 unknown.append(model)
 
     if numbers or unknown:
+        if limit.power_off:
+            bot.send(context, '下班喽~')
+            return
         if limit():
             bot.send(context, '哼，不理你了!')
             return
@@ -131,7 +139,7 @@ def batch_tracking(cars: Sequence[str]) -> Iterable[str]:
 class Limit(AttrDict):
     'Limit the request rate.'
 
-    def __init__(self, rate=2, per=60):
+    def __init__(self, rate=1.5, per=60):
         allowance = rate  # unit: messages
         last_check = time.monotonic()
         self.update(locals())
@@ -153,6 +161,7 @@ def main(database: str):
     'Load the known car models.'
     global limit
     limit = Limit()
+    limit.power_off = False
 
     global known_models
     try:

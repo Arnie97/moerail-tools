@@ -4,7 +4,7 @@ import io
 import re
 import requests
 
-from util import repl, AttrDict, FilterFormatter
+from util import module_dir, repl, AttrDict, FilterFormatter
 from tickets import show_image, API
 
 
@@ -25,14 +25,14 @@ class Tracking(API):
             'hwzz.hph': '',
         }
 
-    def show_captcha(self):
-        'Show the CAPTCHA image.'
+    def load_captcha(self) -> io.BytesIO:
+        'Fetch the CAPTCHA image.'
         params = dict(math=0, update=self.query['mathsid'])
         response = self.fetch(
             'security/jcaptcha.jpg',
             method='GET', params=params, json=False,
         )
-        show_image(io.BytesIO(response.content))
+        return io.BytesIO(response.content)
 
     def check_captcha(self, answer: str, test_case='1234567'):
         'Check whether the CAPTCHA answers are correct.'
@@ -100,8 +100,21 @@ def strip_lines(text: str, sep='') -> str:
 def auth():
     'Solve the CAPTCHA to get a valid session.'
     x = Tracking()
+    captcha_image = x.load_captcha()
+    try:
+        from captcha.captcha import image_filter, solve
+    except ImportError:
+        pass
+    else:
+        captcha_image = image_filter(captcha_image)
+        template_image = module_dir('captcha/tests/templates/95306.bmp')
+        answer_digits = solve(captcha_image, template_image)
+        answer = ''.join(map(str, answer_digits))
+        x.check_captcha(answer)
+        return x
+
     while True:
-        x.show_captcha()
+        show_image(captcha_image)
         try:
             x.check_captcha(input('# ').strip())
         except AssertionError as e:

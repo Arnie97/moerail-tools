@@ -1,0 +1,3 @@
+[submodule "captcha"]
+	path = captcha
+	url = https://github.com/Arnie97/captcha-solver.git

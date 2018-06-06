@@ -86,7 +86,7 @@ def parse_shell(context) -> str:
     elif context.message.startswith('//'):
         limit.power_off = not limit.power_off
         if limit.power_off:
-            return '下班了，明天见~'
+            return '下班喽~'
 
     elif context.message_type == 'private':
         return 'Roger'
@@ -112,12 +112,13 @@ def parse_tracking(context):
                 unknown.append(i)
 
     if numbers or unknown:
-        if limit.power_off:
-            bot.send(context, '下班喽~')
-            return
-        if limit():
-            bot.send(context, '哼，不理你了!')
-            return
+        if context.user_id not in limit.administrators:
+            if limit.power_off:
+                bot.send(context, '下班了，明天见~')
+                return
+            elif limit():
+                bot.send(context, '哼，不理你了!')
+                return
         roger = (
             '、'.join(unknown) + ' 是什么车哦，没见过呢' if unknown
             else '好的，知道了' if identifiers

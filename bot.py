@@ -109,7 +109,15 @@ def parse_tracking(context):
                 '''.strip().format(i, emu_models[i])
                 bot.send(context, strip_lines(reply, sep='\n'))
             else:
-                unknown.append(i)
+                for model, pattern in emu_patterns.items():
+                    if re.match(pattern, i):
+                        reply = '''
+                            {0} 次列车使用的动车组型号应该是{1}。
+                        '''.strip().format(i, model)
+                        bot.send(context, reply)
+                        break
+                else:
+                    unknown.append(i)
 
     if numbers or unknown:
         if context.user_id not in limit.administrators:
@@ -184,6 +192,13 @@ def main(config_file: str):
             known_models = json.load(f)
     except:
         known_models = {}
+
+    global emu_patterns
+    try:
+        with open(limit.emu_json) as f:
+            emu_patterns = json.load(f)[':']
+    except:
+        emu_patterns = {}
 
     global emu_models
     emu_models = {}

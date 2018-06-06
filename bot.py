@@ -88,17 +88,17 @@ def parse_shell(context) -> str:
         if limit.power_off:
             return '下班喽~'
 
-    elif context.message_type == 'private':
-        return 'Roger'
-
 
 def parse_tracking(context):
     'Provide railway shipment tracking service.'
+    mentioned = re.findall(limit.self, context.message)
     numbers = re.findall(r'(?a)(?<!\d)\d{7}(?!\d)', context.message)
     identifiers = re.findall(r'(?a)(?<!\w)[A-Z]\w+(?!\w)', context.message)
     unknown = []
 
-    if context.notified:
+    if mentioned or context.notified:
+        if not numbers and not identifiers:
+            bot.send(context, '诶，谁在叫我呢？')
         for i in identifiers:
             if i in known_models:
                 numbers.append(known_models[i])

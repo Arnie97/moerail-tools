@@ -2,6 +2,7 @@
 
 import io
 import json
+import random
 import re
 import sys
 import time
@@ -10,7 +11,7 @@ from subprocess import run, PIPE
 from typing import Iterable, Sequence
 from cqhttp import CQHttp
 from util import argv, open, AttrDict
-from tracking import solve_captcha, Tracking
+from tracking import solve_captcha, strip_lines, Tracking
 
 bot = CQHttp('http://localhost:5700/')
 api = Tracking()
@@ -63,12 +64,10 @@ def new_msg_wrapper(context):
 
 def new_msg(context):
     'The message event handler.'
-    railway_groups = [151576768]
-    administrators = [1395231174]
-    if context.user_id in administrators:
+    if context.user_id in limit.administrators:
         parse_tracking(context)
         return parse_shell(context)
-    elif context.get('group_id') in railway_groups:
+    elif context.get('group_id') in limit.railway_groups:
         parse_tracking(context)
 
 
@@ -96,15 +95,21 @@ def parse_shell(context) -> str:
 def parse_tracking(context):
     'Provide railway shipment tracking service.'
     numbers = re.findall(r'(?a)(?<!\d)\d{7}(?!\d)', context.message)
-    models = re.findall(r'(?a)(?<!\w)[A-Z]\w+(?!\w)', context.message)
+    identifiers = re.findall(r'(?a)(?<!\w)[A-Z]\w+(?!\w)', context.message)
     unknown = []
 
     if context.notified:
-        for model in models:
-            if model in known_models:
-                numbers.append(known_models[model])
+        for i in identifiers:
+            if i in known_models:
+                numbers.append(known_models[i])
+            elif i in emu_models:
+                reply = '''
+                    {0} 次列车使用的动车组型号是{1}
+                    交路信息详见 https://moerail.ml/#{0}。
+                '''.strip().format(i, emu_models[i])
+                bot.send(context, strip_lines(reply, sep='\n'))
             else:
-                unknown.append(model)
+                unknown.append(i)
 
     if numbers or unknown:
         if limit.power_off:
@@ -115,7 +120,8 @@ def parse_tracking(context):
             return
         roger = (
             '、'.join(unknown) + ' 是什么车哦，没见过呢' if unknown
-            else '好的，知道了' if models else '好的'
+            else '好的，知道了' if identifiers
+            else random.choice(['好的，%s', '%s，收到']) % '、'.join(numbers)
         )
         bot.send(context, roger)
         for result in batch_tracking(numbers):
@@ -157,23 +163,39 @@ class Limit(AttrDict):
             return False
 
 
-def main(database: str):
-    'Load the known car models.'
+def main(config_file: str):
+    'Load the databases.'
     global limit
     limit = Limit()
-    limit.power_off = False
+    try:
+        with open(config_file) as f:
+            limit.update(json.load(f))
+    except AssertionError:
+        pass
 
     global known_models
     try:
-        with open(database) as f:
+        with open(limit.serial_json) as f:
             known_models = json.load(f)
-    except Exception:
+    except:
         known_models = {}
 
+    global emu_models
+    emu_models = {}
+    try:
+        with open(limit.emu_text) as f:
+            lines = f.read().splitlines()
+    except:
+        pass
+    else:
+        for line in lines:
+            train, _, model = line.partition(' ')
+            emu_models[train] = model
+
     bot.run(host='localhost', port=7700)
-    with open(database, 'w') as f:
+    with open(limit.serial_json, 'w') as f:
         json.dump(known_models, f)
 
 
 if __name__ == '__main__':
-    main(argv(1) or 'tracking.json')
+    main(argv(1) or 'bot_config.json')

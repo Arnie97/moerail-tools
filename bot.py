@@ -8,7 +8,7 @@ import sys
 import time
 from contextlib import redirect_stdout, redirect_stderr
 from subprocess import run, PIPE
-from typing import Iterable, Sequence
+from typing import Iterable, Sequence, Tuple
 from cqhttp import CQHttp
 from util import argv, open, AttrDict
 from tracking import solve_captcha, strip_lines, Tracking
@@ -125,22 +125,26 @@ def parse_tracking(context):
             else random.choice(['好的，%s', '%s，收到']) % '、'.join(numbers)
         )
         bot.send(context, roger)
-        for result in batch_tracking(numbers):
-            bot.send(context, result)
+        for car, result in batch_tracking(numbers):
+            reply = {
+                '没有满足条件的查询结果！': '找不到 %s 呢。' % car,
+                '货车追踪失败，请稍后再试！': '噫，%s？不告诉你哦~' % car,
+            }.get(result, result)
+            bot.send(context, reply)
 
 
-def batch_tracking(cars: Sequence[str]) -> Iterable[str]:
+def batch_tracking(cars: Sequence[str]) -> Iterable[Tuple[str, str]]:
     'Response railway shipment queries.'
     api.query['check_code'] = solve_captcha(api.load_captcha())
     for car in cars:
         try:
             info = api.track_car(car)
         except AssertionError as e:
-            yield e.args[0]
+            yield car, e.args[0]
         else:
             if info.carType:
                 known_models[info.carType] = info.carNo
-            yield api.explain(info)
+            yield car, api.explain(info)
 
 
 class Limit(AttrDict):

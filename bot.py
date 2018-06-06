@@ -99,23 +99,36 @@ def parse_tracking(context):
     if mentioned or context.notified:
         if not numbers and not identifiers:
             bot.send(context, '诶，谁在叫我呢？')
-        for i in identifiers:
-            if i in known_models:
-                numbers.append(known_models[i])
-            elif i in emu_models:
-                reply = '''
-                    {0} 次列车使用的动车组型号是{1}
-                    交路信息详见 https://moerail.ml/#{0}。
-                '''.strip().format(i, emu_models[i])
-                bot.send(context, strip_lines(reply, sep='\n'))
+    else:
+        identifiers = []
+
+    for i in identifiers:
+        if i in known_models:
+            numbers.append(known_models[i])
+        elif i in emu_models:
+            reply = '''
+                {0} 次列车使用的动车组型号是{1}
+                交路信息详见 https://moerail.ml/#{0}。
+            '''.strip().format(i, emu_models[i])
+            bot.send(context, strip_lines(reply, sep='\n'))
+        else:
+            for model, pattern in emu_patterns.items():
+                if re.match(pattern, i):
+                    reply = '''
+                        {0} 次列车使用的动车组型号应该是{1}。
+                    '''.strip().format(i, model)
+                    bot.send(context, reply)
+                    break
             else:
-                for model, pattern in emu_patterns.items():
-                    if re.match(pattern, i):
-                        reply = '''
-                            {0} 次列车使用的动车组型号应该是{1}。
-                        '''.strip().format(i, model)
-                        bot.send(context, reply)
-                        break
+                prefix_matches = sorted(
+                    model for model in known_models
+                    if i in model
+                )
+                if prefix_matches:
+                    reply = '''
+                        {0}… 你指的是 {1} 之类的吗？
+                    '''.strip().format(i, '、'.join(prefix_matches))
+                    bot.send(context, reply)
                 else:
                     unknown.append(i)
 

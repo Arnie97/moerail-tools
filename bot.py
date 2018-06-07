@@ -89,11 +89,20 @@ def parse_shell(context) -> str:
             return '下班喽~'
 
 
+def match_identifiers(text: str, remove='-') -> list:
+    'Return all non-overlapping identifiers in the text, with hyphens removed.'
+    pattern = r'(?a)(?<!\w)([A-Z][-\w]+|\w+[A-Z])(?!\w)'
+    return [
+        i.replace(remove, '')
+        for i in re.findall(pattern, text)
+    ]
+
+
 def parse_tracking(context):
     'Provide railway shipment tracking service.'
     mentioned = re.findall(limit.self, context.message)
     numbers = re.findall(r'(?a)(?<!\d)\d{7}(?!\d)', context.message)
-    identifiers = re.findall(r'(?a)(?<!\w)[A-Z]\w+(?!\w)', context.message)
+    identifiers = match_identifiers(context.message)
     unknown = []
 
     if mentioned or context.notified:
@@ -103,7 +112,18 @@ def parse_tracking(context):
         identifiers = []
 
     for i in identifiers:
-        if i in known_models:
+        if i in trainnets:
+            reply = '''
+                {0[1]}
+                详见 https://trainnets.com/archives/{0[0]}。
+                {1}
+            '''.strip().format(
+                trainnets[i],
+                '\n如果你想追踪它的话，可以用 %s 这个车号。' % known_models[i]
+                if i in known_models else ''
+            )
+            bot.send(context, strip_lines(reply))
+        elif i in known_models:
             numbers.append(known_models[i])
         elif i in emu_models:
             reply = '''
@@ -224,6 +244,26 @@ def main(config_file: str):
         for line in lines:
             train, _, model = line.partition(' ')
             emu_models[train] = model
+
+    global trainnets
+    trainnets = {}
+    try:
+        with open(limit.trainnets_text) as f:
+            lines = f.read().splitlines()
+    except:
+        pass
+    else:
+        for line in lines:
+            url, _, intro = line.strip().partition(' ')
+            identifiers = match_identifiers(intro)
+            if identifiers:
+                for extra, i in enumerate(identifiers):
+                    if i not in trainnets:
+                        trainnets[i] = (url, intro)
+                    elif not extra:
+                        print(i, intro[:30])
+            else:
+                print('?', intro[:30])
 
     bot.run(host='localhost', port=7700)
     with open(limit.serial_json, 'w') as f:

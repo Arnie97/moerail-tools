@@ -36,7 +36,18 @@ def unescape(text: str) -> str:
 @bot.on_event('group_increase')
 def new_group_member(context):
     'Send the welcome message.'
-    bot.send(context, message='群地位-1', is_raw=True)
+    bot.send(context, '群地位-1')
+
+
+@bot.on_event('group_upload')
+def new_group_file(context):
+    'Detect file uploads.'
+    reply = (
+        '怎么又双叒叕是 base.apk [CQ:face,id=39]'
+        if context['file']['name'] == 'base.apk'
+        else '诶，我看看传了什么'
+    )
+    bot.send(context, reply)
 
 
 @bot.on_request('group', 'friend')
@@ -100,6 +111,7 @@ def match_identifiers(text: str, remove='-') -> list:
 
 def parse_tracking(context):
     'Provide railway shipment tracking service.'
+    member = AttrDict(bot.get_group_member_info(**context))
     mentioned = re.findall(limit.self, context.message)
     numbers = re.findall(r'(?a)(?<!\d)\d{7}(?!\d)', context.message)
     identifiers = match_identifiers(context.message)
@@ -107,7 +119,11 @@ def parse_tracking(context):
 
     if mentioned or context.notified:
         if not numbers and not identifiers:
-            bot.send(context, '诶，谁在叫我呢？')
+            reply = (
+                '诶，谁在叫我呢？' if not member.title
+                else '怎么啦，%s' % member.title
+            )
+            bot.send(context, reply)
     else:
         identifiers = []
 
@@ -160,8 +176,10 @@ def parse_tracking(context):
             elif limit():
                 bot.send(context, '哼，不理你了!')
                 return
+
         roger = (
             '、'.join(unknown) + ' 是什么车哦，没见过呢' if unknown
+            else '好的，%s' % member.title if member.title
             else '好的，知道了' if identifiers
             else random.choice(['好的，%s', '%s，收到']) % '、'.join(numbers)
         )

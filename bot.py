@@ -173,7 +173,7 @@ def parse_tracking(context):
             if limit.power_off:
                 bot.send(context, '下班了，明天见~')
                 return
-            elif limit():
+            elif numbers and limit():
                 bot.send(context, '哼，不理你了!')
                 return
 

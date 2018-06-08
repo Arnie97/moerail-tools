@@ -189,6 +189,9 @@ def parse_tracking(context):
             if limit.power_off:
                 bot.send(context, '下班了，明天见~')
                 return
+            elif context.user_id in limit.black_list:
+                bot.send(context, '哼，坏蛋，不告诉你！')
+                return
             elif numbers and limit():
                 bot.send(context, '哼，不理你了!')
                 return

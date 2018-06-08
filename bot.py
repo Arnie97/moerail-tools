@@ -11,6 +11,7 @@ from subprocess import run, PIPE
 from typing import Iterable, Sequence, Tuple
 from cqhttp import CQHttp
 from util import argv, open, AttrDict
+from trains import load_trains, parse_trains
 from tracking import solve_captcha, strip_lines, Tracking
 
 bot = CQHttp('http://localhost:5700/')
@@ -102,7 +103,7 @@ def parse_shell(context) -> str:
 
 def match_identifiers(text: str, remove='-') -> list:
     'Return all non-overlapping identifiers in the text, with hyphens removed.'
-    pattern = r'(?a)(?<!\w)([A-Z][-\w]+|\w+[A-Z])(?!\w)'
+    pattern = r'(?a)(?<!\w)([A-Z][-\w]+|\d{4}|\w+[A-Z])(?!\w)'
     return [
         i.replace(remove, '')
         for i in re.findall(pattern, text)
@@ -160,7 +161,12 @@ def parse_tracking(context):
                     model for model in known_models
                     if i in model
                 )
-                if prefix_matches:
+                if i in trains:
+                    reply = '''
+                        {0} 次旅客列车，从{1[0]}站始发，终到{1[1]}站。
+                    '''.strip().format(i, trains[i])
+                    bot.send(context, reply)
+                elif prefix_matches:
                     reply = '''
                         {0}… 你指的是 {1} 之类的吗？
                     '''.strip().format(i, '、'.join(prefix_matches))
@@ -282,6 +288,20 @@ def main(config_file: str):
                         print(i, intro[:30])
             else:
                 print('?', intro[:30])
+
+    global trains
+    trains = {}
+    try:
+        with open(limit.trains_json) as f:
+            print('Loading...')
+            data = load_trains(f.read())
+            print('Sorting...')
+            for i in parse_trains(data):
+                trains[i[1]] = i[2:]
+    except:
+        pass
+    else:
+        print('Ready.')
 
     bot.run(host='localhost', port=7700)
     with open(limit.serial_json, 'w') as f:

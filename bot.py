@@ -7,6 +7,7 @@ import re
 import sys
 import time
 from contextlib import redirect_stdout, redirect_stderr
+from itertools import chain
 from subprocess import run, PIPE
 from typing import Iterable, Sequence, Tuple
 from cqhttp import CQHttp
@@ -158,8 +159,8 @@ def parse_tracking(context):
                     break
             else:
                 prefix_matches = sorted(
-                    model for model in known_models
-                    if i in model
+                    model for model in set(chain(known_models, trainnets))
+                    if (i in model or model in i) and len(model) > 1
                 )
                 if i in trains:
                     reply = '''

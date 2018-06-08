@@ -113,7 +113,11 @@ def match_identifiers(text: str, remove='-') -> list:
 
 def parse_tracking(context):
     'Provide railway shipment tracking service.'
-    member = AttrDict(bot.get_group_member_info(**context))
+    member = AttrDict(
+        bot.get_group_member_info(**context)
+        if context.message_type == 'group'
+        else dict(title='')
+    )
     mentioned = re.findall(limit.self, context.message)
     numbers = re.findall(r'(?a)(?<!\d)\d{7}(?!\d)', context.message)
     identifiers = match_identifiers(context.message)

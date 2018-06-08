@@ -133,6 +133,11 @@ def parse_tracking(context):
     else:
         identifiers = []
 
+    numbers = [i for i in numbers if not re.search(limit.stop_words, i)]
+    if any(re.search(limit.bad_words, i) for i in chain(numbers, identifiers)):
+        bot.send(context, '哼，不许捣乱！')
+        return
+
     for i in identifiers:
         if i in trainnets:
             reply = '''

@@ -54,8 +54,11 @@ def new_group_file(context):
 
 @bot.on_request('group', 'friend')
 def new_friend(context):
-    'Accepts friend requests.'
-    return {'approve': True}
+    'Accepts friend requests from administrators.'
+    if context['user_id'] in limit.administrators:
+        return {'approve': True}
+    for i in limit.administrators:
+        bot.send_private_msg(user_id=i, message=context)
 
 
 @bot.on_message()

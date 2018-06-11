@@ -103,6 +103,9 @@ def parse_shell(context) -> str:
         if limit.power_off:
             return '下班喽~'
 
+    elif context.message_type == 'private':
+        return dict(reply=context.raw_message, auto_escape=True)
+
 
 def match_identifiers(text: str, remove='-') -> list:
     'Return all non-overlapping identifiers in the text, with hyphens removed.'

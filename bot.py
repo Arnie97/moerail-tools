@@ -72,16 +72,15 @@ def new_msg_wrapper(context):
     elif isinstance(value, dict):
         return value
     else:
-        return {'reply': value, 'at_sender': False}
+        return dict(reply=value, at_sender=False)
 
 
 def new_msg(context):
     'The message event handler.'
     if context.user_id in limit.administrators:
-        parse_tracking(context)
-        return parse_shell(context)
+        return parse_shell(context) or RailwayContext(context)()
     elif context.get('group_id') in limit.railway_groups:
-        parse_tracking(context)
+        return RailwayContext(context)()
 
 
 def parse_shell(context) -> str:
@@ -111,34 +110,90 @@ def match_identifiers(text: str, remove='-') -> list:
     ]
 
 
-def parse_tracking(context):
-    'Provide railway shipment tracking service.'
-    member = AttrDict(
-        bot.get_group_member_info(**context)
-        if context.message_type == 'group'
-        else dict(title='')
-    )
-    mentioned = re.findall(limit.self, context.message)
-    numbers = re.findall(r'(?a)(?<!\d)\d{7}(?!\d)', context.message)
-    identifiers = match_identifiers(context.message)
-    unknown = []
+class RailwayContext(AttrDict):
 
-    if mentioned or context.notified:
-        if not numbers and not identifiers:
-            reply = (
-                '诶，谁在叫我呢？' if not member.title
-                else '怎么啦，%s' % member.title
-            )
-            bot.send(context, reply)
-    else:
-        identifiers = []
+    def __init__(self, context):
+        'Search the keywords in the received message.'
+        self.update(
+            bot.get_group_member_info(**context)
+            if context.message_type == 'group'
+            else dict(title='')
+        )
+        self.update(context)
+        self.mentioned = re.findall(limit.self, context.message)
+        self.numbers = re.findall(r'(?a)(?<!\d)\d{7}(?!\d)', context.message)
+        self.identifiers = match_identifiers(context.message)
+        self.unknown = []
 
-    numbers = [i for i in numbers if not re.search(limit.stop_words, i)]
-    if any(re.search(limit.bad_words, i) for i in chain(numbers, identifiers)):
-        bot.send(context, '哼，不许捣乱！')
-        return
+    def __call__(context):
+        'Response the query.'
+        ignore_request = (
+            not context.notified and
+            not context.mentioned and
+            context.message_type != 'private' or
+            not context.greeting_filter() or
+            not context.abuse_filter()
+        )
+        if ignore_request:
+            return
 
-    for i in identifiers:
+        for i in context.identifiers:
+            if context.model_filter(i) and context.train_filter(i):
+                context.wildcard_filter(i)
+        if context.numbers or context.unknown:
+            if context.rate_filter():
+                context.query_numbers()
+
+    def rate_filter(context) -> bool:
+        'Return error messages when the rate limit is exceeded.'
+        if context.user_id in limit.administrators:
+            return True
+        elif limit.power_off:
+            reply = '下班了，明天见~'
+        elif context.user_id in limit.black_list:
+            reply = '哼，坏蛋，不告诉你！'
+        elif context.numbers and limit():
+            reply = '哼，不理你了!'
+        else:
+            return True
+        bot.send(context, reply)
+
+    def greeting_filter(context) -> bool:
+        'Get the corresponding greeting messages for preset keywords.'
+        if '抱' in context.message:
+            if context.user_id in limit.black_list:
+                reply = '坏蛋，不让你抱，踩你哦（'
+            elif context.title:
+                reply = '抱抱%s~' % context.title
+            else:
+                reply = '抱w'
+        elif '吃' in context.message:
+            reply = '噫，不可以吃！'
+        elif not context.numbers and not context.identifiers:
+            if context.title:
+                reply = '怎么啦，%s' % context.title
+            else:
+                reply = '诶，谁在叫我呢？'
+        else:
+            return True
+        bot.send(context, reply)
+
+    def abuse_filter(context) -> bool:
+        'Prevent stop words and bad words.'
+        context.numbers = [
+            i for i in context.numbers
+            if not re.search(limit.stop_words, i)
+        ]
+        if context.user_id in limit.administrators:
+            return True
+        for i in chain(context.numbers, context.identifiers):
+            if re.search(limit.bad_words, i):
+                bot.send(context, '哼，不许捣乱！')
+                return False
+        return True
+
+    def model_filter(context, i: str) -> bool:
+        'Return the introduction of railway cars.'
         if i in trainnets:
             reply = '''
                 {0[1]}
@@ -151,59 +206,68 @@ def parse_tracking(context):
             )
             bot.send(context, strip_lines(reply))
         elif i in known_models:
-            numbers.append(known_models[i])
+            context.numbers.append(known_models[i])
         elif i in emu_models:
-            reply = '''
-                {0} 次列车使用的动车组型号是{1}
+            reply = context.get_train_route(i) + '''
+                列车使用的动车组型号是{1}
                 交路信息详见 https://moerail.ml/#{0}。
             '''.strip().format(i, emu_models[i])
             bot.send(context, strip_lines(reply, sep='\n'))
         else:
-            for model, pattern in emu_patterns.items():
-                if re.match(pattern, i):
-                    reply = '''
-                        {0} 次列车使用的动车组型号应该是{1}。
-                    '''.strip().format(i, model)
-                    bot.send(context, reply)
-                    break
-            else:
-                prefix_matches = sorted(
-                    model for model in set(chain(known_models, trainnets))
-                    if (i in model or model in i) and len(model) > 1
-                )
-                if i in trains:
-                    reply = '''
-                        {0} 次旅客列车，从{1[0]}站始发，终到{1[1]}站。
-                    '''.strip().format(i, trains[i])
-                    bot.send(context, reply)
-                elif prefix_matches:
-                    reply = '''
-                        {0}… 你指的是 {1} 之类的吗？
-                    '''.strip().format(i, '、'.join(prefix_matches))
-                    bot.send(context, reply)
-                else:
-                    unknown.append(i)
+            return True
 
-    if numbers or unknown:
-        if context.user_id not in limit.administrators:
-            if limit.power_off:
-                bot.send(context, '下班了，明天见~')
-                return
-            elif context.user_id in limit.black_list:
-                bot.send(context, '哼，坏蛋，不告诉你！')
-                return
-            elif numbers and limit():
-                bot.send(context, '哼，不理你了!')
-                return
+    def train_filter(context, i: str) -> bool:
+        'Infer the models of other multiple units.'
+        reply = context.get_train_route(i)
+        for model, pattern in emu_patterns.items():
+            if re.match(pattern, i):
+                reply += '''
+                    列车使用的动车组型号应该是{1}。
+                '''.strip().format(i, model)
+                break
+        else:
+            if i not in trains:
+                return True
+        bot.send(context, reply)
 
-        roger = (
-            '、'.join(unknown) + ' 是什么车哦，没见过呢' if unknown
-            else '好的，%s' % member.title if member.title
-            else '好的，知道了' if identifiers
-            else random.choice(['好的，%s', '%s，收到']) % '、'.join(numbers)
+    @staticmethod
+    def get_train_route(i) -> str:
+        'Provide information about passenger train routes.'
+        reply = '{0} 次' if i not in trains else '''
+            {0} 次旅客列车，从{1[0]}站始发，终到{1[1]}站。
+        '''.strip()
+        return reply.format(i, trains.get(i))
+
+    def wildcard_filter(context, i: str) -> bool:
+        'Match incomplete model names.'
+        prefix_matches = sorted(
+            model for model in set(chain(known_models, trainnets))
+            if (i in model or model in i) and len(model) > 1
         )
-        bot.send(context, roger)
-        for car, result in batch_tracking(numbers):
+        if prefix_matches:
+            reply = '''
+                {0}… 你指的是 {1} 之类的吗？
+            '''.strip().format(i, '、'.join(prefix_matches))
+        else:
+            context.unknown.append(i)
+            return True
+        bot.send(context, reply)
+
+    def query_numbers(context):
+        'Provide railway shipment tracking service.'
+        if context.unknown:
+            models = '、'.join(context.unknown)
+            reply = '%s 是什么车哦，没见过呢' % models
+        elif context.title:
+            reply = '好的，%s' % context.title
+        elif context.identifiers:
+            reply = '好的，知道了'
+        else:
+            numbers = '、'.join(context.numbers)
+            reply = random.choice(['好的，%s', '%s，收到']) % numbers
+        bot.send(context, reply)
+
+        for car, result in batch_tracking(context.numbers):
             reply = {
                 '没有满足条件的查询结果！': '找不到 %s 呢。' % car,
                 '货车追踪失败，请稍后再试！': '噫，%s？不告诉你哦~' % car,

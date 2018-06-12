@@ -240,9 +240,9 @@ class RailwayContext(AttrDict):
     def get_train_route(i) -> str:
         'Provide information about passenger train routes.'
         reply = '{0} 次' if i not in trains else '''
-            {0} 次旅客列车，从{1[0]}站始发，终到{1[1]}站。
+            {1[0]} 次旅客列车，从{1[1]}站始发，终到{1[2]}站。
         '''.strip()
-        return reply.format(i, trains.get(i))
+        return reply.format(i, trains.get(trains.get(i)))
 
     def wildcard_filter(context, i: str) -> bool:
         'Match incomplete model names.'
@@ -380,7 +380,12 @@ def main(config_file: str):
             data = load_trains(f.read())
             print('Sorting...')
             for i in parse_trains(data):
-                trains[i[1]] = i[2:]
+                n, name, src, dest = i
+                trains[name] = n
+                if n in trains:
+                    series = trains[n][0]
+                    name = series + ('' if name in series else '/' + name)
+                trains[n] = (name, src, dest)
     except:
         pass
     else:

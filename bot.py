@@ -9,6 +9,7 @@ import time
 from contextlib import redirect_stdout, redirect_stderr
 from itertools import chain
 from subprocess import run, PIPE
+from string import ascii_uppercase
 from typing import Dict, Iterable, Sequence, Tuple
 from cqhttp import CQHttp
 from util import argv, open, AttrDict
@@ -214,22 +215,23 @@ class RailwayContext(AttrDict):
         elif i in known_models:
             context.numbers.append(known_models[i])
         elif i in emu_models:
-            reply = context.get_train_route(i) + '''
-                列车使用的动车组型号是{1}
+            reply, foreword = context.get_train_route(i)
+            reply += '''
+                {2}使用的动车组型号是{1}
                 交路信息详见 https://moerail.ml/#{0}。
-            '''.strip().format(i, emu_models[i])
+            '''.strip().format(i, emu_models[i], foreword)
             bot.send(context, strip_lines(reply, sep='\n'))
         else:
             return True
 
     def train_filter(context, i: str) -> bool:
         'Infer the models of other multiple units.'
-        reply = context.get_train_route(i)
+        reply, foreword = context.get_train_route(i)
         for model, pattern in emu_patterns.items():
             if re.match(pattern, i):
                 reply += '''
-                    列车使用的动车组型号应该是{1}。
-                '''.strip().format(i, model)
+                    {2}使用的动车组型号应该是{1}。
+                '''.strip().format(i, model, foreword)
                 break
         else:
             if i not in trains:
@@ -237,12 +239,13 @@ class RailwayContext(AttrDict):
         bot.send(context, reply)
 
     @staticmethod
-    def get_train_route(i) -> str:
+    def get_train_route(i) -> Tuple[str, str]:
         'Provide information about passenger train routes.'
-        reply = '{0} 次' if i not in trains else '''
-            {1[0]} 次旅客列车，从{1[1]}站始发，终到{1[2]}站。
-        '''.strip()
-        return reply.format(i, trains.get(trains.get(i)))
+        description = get_train_description(i).strip()
+        if i not in trains:
+            return description % i, ''
+        reply = description + '，从%s站始发，终到%s站。'
+        return reply % trains[trains[i]], '列车'
 
     def wildcard_filter(context, i: str) -> bool:
         'Match incomplete model names.'
@@ -292,6 +295,9 @@ def batch_tracking(cars: Sequence[str]) -> Iterable[Tuple[str, str]]:
         else:
             if info.carType:
                 known_models[info.carType] = info.carNo
+            if info.trainId:
+                info.train = get_train_description(info.trainId) % info.trainId
+                info.trainId = None
             yield car, api.explain(info)
 
 
@@ -314,6 +320,55 @@ class Limit(AttrDict):
         else:
             self.allowance -= 1
             return False
+
+
+class TrainRange:
+
+    def __init__(self, first: str, last: str):
+        'Parse the range representation.'
+        assert first and last
+        self.prefix, first = self.split(first)
+        ignored_prefix, last = self.split(last)
+        self.range = range(first, last + 1)
+
+    def __contains__(self, train: str) -> bool:
+        'Check whether a train number is in the specified range.'
+        prefix, number = self.split(train)
+        return prefix == self.prefix and number in self.range
+
+    @staticmethod
+    def split(train: str) -> Tuple[str, int]:
+        'Split the train number into the prefix part and the numeric part.'
+        assert train
+        if train[0] in ascii_uppercase:
+            return train[0], int(train[1:])
+        else:
+            return '', int(train)
+
+
+def get_train_description(train: str) -> str:
+    'Provide information about the train number itself.'
+    results = [' %s 次']
+    for tr in train_ranges:
+        if train not in tr:
+            continue
+        elif tr.category.startswith('@'):
+            results.insert(0, tr.category[1:])
+        else:
+            results.append(tr.category)
+    if len(results) == 1:
+        results.append('列车')
+    return ''.join(results)
+
+
+def parse_train_ranges(lines: Iterable[str]) -> Iterable[TrainRange]:
+    'Parse the train number ranges to determine train categories.'
+    for line in lines:
+        category, *range_pairs = line.strip().split()
+        for pair in range_pairs:
+            tr = TrainRange(*pair.split('-'))
+            tr.category = category
+            yield tr
 
 
 def parse_trainnets(lines: Iterable[str]) -> Dict[str, Tuple[str, str]]:
@@ -377,6 +432,15 @@ def main(config_file: str):
         trainnets = {}
     else:
         trainnets = parse_trainnets(lines)
+
+    global train_ranges
+    try:
+        with open(limit.trains_text) as f:
+            lines = f.read().splitlines()
+    except:
+        train_ranges = []
+    else:
+        train_ranges = list(parse_train_ranges(lines))
 
     global trains
     try:

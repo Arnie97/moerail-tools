@@ -110,7 +110,7 @@ def parse_shell(context) -> str:
 
 def match_identifiers(text: str, remove='-') -> list:
     'Return all non-overlapping identifiers in the text, with hyphens removed.'
-    pattern = r'(?a)(?<!\w)([A-Z][-\w]+|\d{4}|\w+[A-Z])(?!\w)'
+    pattern = r'(?a)(?<!\w)([A-Z][-\w]+|\d{4,5}|\w+[A-Z])(?!\w)'
     return [
         i.replace(remove, '')
         for i in re.findall(pattern, text)
@@ -253,10 +253,15 @@ class RailwayContext(AttrDict):
             model for model in set(chain(known_models, trainnets))
             if (i in model or model in i) and len(model) > 1
         )
+        description = get_train_description(i).strip()
         if prefix_matches:
             reply = '''
                 {0}… 你指的是 {1} 之类的吗？
             '''.strip().format(i, '、'.join(prefix_matches))
+        elif len(description) > 6:
+            reply = '''
+                嗯，{}？我记不清了呢（
+            '''.strip().format(description % i)
         else:
             context.unknown.append(i)
             return True
@@ -333,8 +338,12 @@ class TrainRange:
 
     def __contains__(self, train: str) -> bool:
         'Check whether a train number is in the specified range.'
-        prefix, number = self.split(train)
-        return prefix == self.prefix and number in self.range
+        try:
+            prefix, number = self.split(train)
+        except:
+            return False
+        else:
+            return prefix == self.prefix and number in self.range
 
     @staticmethod
     def split(train: str) -> Tuple[str, int]:

@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 
 import json
-from typing import Iterable, Tuple
+from typing import Dict, Iterable, Tuple
 
 from sql import sql_shell
 from util import shell, argv, open
@@ -32,6 +32,18 @@ def parse_trains(data: dict) -> Iterable[Tuple[str, str, str, str]]:
             for train in train_type:
                 train = train['train_no'], train['station_train_code']
                 yield tuple([train[0]] + decompose(train[1]))
+
+
+def sort_trains(routes: Iterable[Tuple]) -> Dict[str, Tuple[str, str, str]]:
+    'Match trains with multiple train numbers.'
+    trains = {}
+    for n, name, src, dest in routes:
+        trains[name] = n
+        if n in trains:
+            series = trains[n][0]
+            name = series + ('' if name in series else '/' + name)
+        trains[n] = (name, src, dest)
+    return trains
 
 
 if __name__ == '__main__':

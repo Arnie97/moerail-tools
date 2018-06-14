@@ -9,10 +9,10 @@ import time
 from contextlib import redirect_stdout, redirect_stderr
 from itertools import chain
 from subprocess import run, PIPE
-from typing import Iterable, Sequence, Tuple
+from typing import Dict, Iterable, Sequence, Tuple
 from cqhttp import CQHttp
 from util import argv, open, AttrDict
-from trains import load_trains, parse_trains
+from trains import load_trains, parse_trains, sort_trains
 from tracking import solve_captcha, strip_lines, Tracking
 
 bot = CQHttp('http://localhost:5700/')
@@ -316,6 +316,23 @@ class Limit(AttrDict):
             return False
 
 
+def parse_trainnets(lines: Iterable[str]) -> Dict[str, Tuple[str, str]]:
+    'Extract keywords from the trainnets database.'
+    trainnets = {}
+    for line in lines:
+        url, _, intro = line.strip().partition(' ')
+        identifiers = match_identifiers(intro)
+        if identifiers:
+            for extra, i in enumerate(identifiers):
+                if i not in trainnets:
+                    trainnets[i] = (url, intro)
+                elif not extra:
+                    print(i, intro[:30])
+        else:
+            print('?', intro[:30])
+    return trainnets
+
+
 def main(config_file: str):
     'Load the databases.'
     global limit
@@ -353,42 +370,25 @@ def main(config_file: str):
             emu_models[train] = model
 
     global trainnets
-    trainnets = {}
     try:
         with open(limit.trainnets_text) as f:
             lines = f.read().splitlines()
     except:
-        pass
+        trainnets = {}
     else:
-        for line in lines:
-            url, _, intro = line.strip().partition(' ')
-            identifiers = match_identifiers(intro)
-            if identifiers:
-                for extra, i in enumerate(identifiers):
-                    if i not in trainnets:
-                        trainnets[i] = (url, intro)
-                    elif not extra:
-                        print(i, intro[:30])
-            else:
-                print('?', intro[:30])
+        trainnets = parse_trainnets(lines)
 
     global trains
-    trains = {}
     try:
         with open(limit.trains_json) as f:
             print('Loading...')
             data = load_trains(f.read())
-            print('Sorting...')
-            for i in parse_trains(data):
-                n, name, src, dest = i
-                trains[name] = n
-                if n in trains:
-                    series = trains[n][0]
-                    name = series + ('' if name in series else '/' + name)
-                trains[n] = (name, src, dest)
     except:
-        pass
+        trains = {}
     else:
+        routes = parse_trains(data)
+        print('Sorting...')
+        trains = sort_trains(routes)
         print('Ready.')
 
     bot.run(host='localhost', port=7700)

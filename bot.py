@@ -108,13 +108,13 @@ def parse_shell(context) -> str:
         return dict(reply=context.raw_message, auto_escape=True)
 
 
-def match_identifiers(text: str, remove='-') -> list:
+def match_identifiers(text: str, remove='-') -> AttrDict:
     'Return all non-overlapping identifiers in the text, with hyphens removed.'
     pattern = r'(?a)(?<!\w)([A-Z][-\w]+|\d{4,5}|\w+[A-Z])(?!\w)'
-    return [
-        i.replace(remove, '')
+    return AttrDict(
+        (i.replace(remove, ''), i)
         for i in re.findall(pattern, text)
-    ]
+    )
 
 
 class RailwayContext(AttrDict):
@@ -254,6 +254,7 @@ class RailwayContext(AttrDict):
             if (i in model or model in i) and len(model) > 1
         )
         description = get_train_description(i).strip()
+        i = context.identifiers[i]
         if prefix_matches:
             reply = '''
                 {0}… 你指的是 {1} 之类的吗？

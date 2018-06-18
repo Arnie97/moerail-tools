@@ -286,6 +286,8 @@ class RailwayContext(AttrDict):
             reply = {
                 '没有满足条件的查询结果！': '找不到 %s 呢。' % car,
                 '货车追踪失败，请稍后再试！': '噫，%s？不告诉你哦~' % car,
+                '验证码错误': '你一次问的太多了，记不住了，哼',
+                'JSON': '%s 结尾的车号我没听清呢，能再说一遍吗？' % car[3:],
             }.get(result, result)
             bot.send(context, reply)
 
@@ -298,6 +300,9 @@ def batch_tracking(cars: Sequence[str]) -> Iterable[Tuple[str, str]]:
             info = api.track_car(car)
         except AssertionError as e:
             yield car, e.args[0]
+        except json.decoder.JSONDecodeError as e:
+            print(e.doc)
+            yield car, 'JSON'
         else:
             if info.carType:
                 known_models[info.carType] = info.carNo

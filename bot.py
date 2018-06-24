@@ -67,6 +67,7 @@ def new_msg_wrapper(context):
     'Wraps the message event.'
     context = AttrDict(context)
     context.notified = '[CQ:at,qq=%d]' % context.self_id in context.message
+    context.raw_message = context.message
     context.message = unescape(context.message)
     # print(dict(context))
 
@@ -81,10 +82,46 @@ def new_msg_wrapper(context):
 
 def new_msg(context):
     'The message event handler.'
+    if context.message_type == 'private' and not parse_loopback(context):
+        return
     if context.user_id in limit.administrators:
         return parse_shell(context) or RailwayContext(context)()
     elif context.get('group_id') in limit.railway_groups:
         return RailwayContext(context)()
+
+
+def parse_loopback(context) -> bool:
+    '''语法：@群名 要发送的消息
+
+    可以将群名的任何一部分作为群名缩写。
+    缩写长度不限，只要不与机器人已加入的其他群的名称相混淆即可。
+    '''
+    if not context.raw_message.startswith('@'):
+        return True
+    elif context.user_id in limit.black_list:
+        bot.send(context, '哼，坏蛋，不理你了！')
+        return
+
+    factors = context.raw_message[1:].partition(' ')
+    if not all(factors):
+        reply = parse_loopback.__doc__.strip()
+        bot.send(context, strip_lines(reply, '\n'))
+        return
+
+    group_key, delimit, text = factors
+    matches = [
+        group for group in bot.get_group_list()
+        if group_key in group['group_name']
+    ]
+    if len(matches) == 1:
+        bot.send_group_msg(group_id=matches[0]['group_id'], message=text)
+    else:
+        reply = '「%s」指的是哪个群呢？' % group_key
+        reply += '\n' + '\n'.join(
+            '{group_name}（{group_id}）'.format(**group)
+            for group in matches
+        ) if matches else ''
+        bot.send(context, reply)
 
 
 def parse_shell(context) -> str:

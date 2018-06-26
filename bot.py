@@ -164,7 +164,7 @@ class RailwayContext(AttrDict):
             else dict(title='')
         )
         self.update(context)
-        self.mentioned = re.findall(limit.self, context.message)
+        self.mentioned = re.findall(limit.self, context.raw_message)
         self.identifiers = match_identifiers(context.message)
 
     def __call__(context) -> bool:
@@ -188,23 +188,24 @@ class RailwayContext(AttrDict):
 
     def greeting_filter(context) -> bool:
         'Get the corresponding greeting messages for preset keywords.'
-        if '抱' in context.message:
-            if context.user_id in limit.black_list:
-                reply = '坏蛋，不让你抱，踩你哦（'
-            elif context.title:
-                reply = '抱抱%s~' % context.title
-            else:
-                reply = '抱w'
-        elif '吃' in context.message:
-            reply = '噫，不可以吃！'
-        elif not context.numbers and not context.identifiers:
-            if context.title:
-                reply = '怎么啦，%s' % context.title
-            else:
-                reply = '诶，谁在叫我呢？'
+        for keyword, response in limit.greetings.items():
+            if re.search(keyword, context.raw_message):
+                break
+        else:  # nothing recognized
+            if context.identifiers:
+                return True
+            response = limit.greetings['^$']
+
+        if isinstance(response, str):
+            response = [response]
+        if context.user_id in limit.black_list and len(response) >= 3:
+            reply = 2
+        elif context.title and len(response) >= 2:
+            reply = 1
         else:
-            return True
-        bot.send(context, reply)
+            reply = 0
+        reply = random.choice(response[reply].split('|'))
+        bot.send(context, reply.format(context.title))
 
     def abuse_filter(context) -> bool:
         'Prevent stop words and bad words.'

@@ -10,7 +10,7 @@ from contextlib import redirect_stdout, redirect_stderr
 from itertools import chain
 from subprocess import run, PIPE
 from string import ascii_uppercase
-from typing import Dict, Iterable, Sequence, Tuple
+from typing import Dict, Iterable, Tuple
 from cqhttp import CQHttp
 from util import argv, open, AttrDict
 from trains import load_trains, parse_trains, sort_trains
@@ -147,7 +147,7 @@ def parse_shell(context) -> str:
 
 def match_identifiers(text: str, remove='-') -> AttrDict:
     'Return all non-overlapping identifiers in the text, with hyphens removed.'
-    pattern = r'(?a)(?<!\w)([A-Z][-\w]+|\d{4,5}|\w+[A-Z])(?!\w)'
+    pattern = r'(?a)(?<!\w)([A-Z][-\w]+|\d{4,7}|\w+[A-Z])(?!\w)'
     return AttrDict(
         (i.replace(remove, ''), i)
         for i in re.findall(pattern, text)
@@ -165,42 +165,26 @@ class RailwayContext(AttrDict):
         )
         self.update(context)
         self.mentioned = re.findall(limit.self, context.message)
-        self.numbers = re.findall(r'(?a)(?<!\d)\d{7}(?!\d)', context.message)
         self.identifiers = match_identifiers(context.message)
-        self.unknown = []
 
-    def __call__(context):
+    def __call__(context) -> bool:
         'Response the query.'
-        ignore_request = (
-            not context.notified and
-            not context.mentioned and
-            context.message_type != 'private' or
-            not context.greeting_filter() or
-            not context.abuse_filter()
-        )
-        if ignore_request:
-            return
-
-        for i in context.identifiers:
-            if context.model_filter(i) and context.train_filter(i):
+        return (
+            any((
+                context.notified,
+                context.mentioned,
+                context.message_type == 'private'
+            )) and
+            context.greeting_filter() and
+            context.abuse_filter() and
+            any(
+                context.model_filter(i) and
+                context.train_filter(i) and
+                context.tracking_filter(i) and
                 context.wildcard_filter(i)
-        if context.numbers or context.unknown:
-            if context.rate_filter():
-                context.query_numbers()
-
-    def rate_filter(context) -> bool:
-        'Return error messages when the rate limit is exceeded.'
-        if context.user_id in limit.administrators:
-            return True
-        elif limit.power_off:
-            reply = '下班了，明天见~'
-        elif context.user_id in limit.black_list:
-            reply = '哼，坏蛋，不告诉你！'
-        elif context.numbers and limit():
-            reply = '哼，不理你了!'
-        else:
-            return True
-        bot.send(context, reply)
+                for i in context.identifiers
+            )
+        )
 
     def greeting_filter(context) -> bool:
         'Get the corresponding greeting messages for preset keywords.'
@@ -224,42 +208,60 @@ class RailwayContext(AttrDict):
 
     def abuse_filter(context) -> bool:
         'Prevent stop words and bad words.'
-        context.numbers = [
-            i for i in context.numbers
-            if not re.search(limit.stop_words, i)
-        ]
-        if context.user_id in limit.administrators:
-            return True
-        for i in chain(context.numbers, context.identifiers):
-            if re.search(limit.bad_words, i):
+        if limit.power_off and context.user_id not in limit.administrators:
+            bot.send(context, '下班了，明天见~')
+            return
+        roger = False
+        original, context.identifiers = context.identifiers, AttrDict()
+        for count, (k, v) in enumerate(original.items()):
+            if re.search(limit.stop_words, k):
+                continue
+            elif context.user_id in limit.administrators:
+                pass
+            elif re.search(limit.bad_words, k) or count >= limit.max_queries:
                 bot.send(context, '哼，不许捣乱！')
-                return False
+                return
+            context.identifiers[k] = v
+            if k.isdigit() and len(k) == 7 or count > 1:
+                roger = True
+
+        if roger:
+            if context.title:
+                reply = '好的，%s' % context.title
+            else:
+                reply = '好的，%s/%s，收到/嗯，%s/%s，明白/%s，知道了'
+                reply = random.choice(reply.split('/'))
+                reply %= '、'.join(context.identifiers)
+            bot.send(context, reply)
         return True
 
     def model_filter(context, i: str) -> bool:
         'Return the introduction of railway cars.'
-        if i in trainnets:
+        if i.isdigit() and len(i) == 6:
+            reply = '''
+                客车目前不能追踪呢，你可以
+                去 http://passearch.info/?type=number&keyword={0} 看看
+                有没有车迷记录 {0} 的配属状况。
+            '''.strip().format(i)
+        elif i in trainnets:
             reply = '''
                 {0[1]}
                 详见 https://trainnets.com/archives/{0[0]}。
                 {1}
             '''.strip().format(
                 trainnets[i],
-                '\n如果你想追踪它的话，可以用 %s 这个车号。' % known_models[i]
+                '如果你想追踪它的话，可以用 %s 这个车号。' % known_models[i]
                 if i in known_models else ''
             )
-            bot.send(context, strip_lines(reply))
-        elif i in known_models:
-            context.numbers.append(known_models[i])
         elif i in emu_models:
             reply, foreword = context.get_train_route(i)
             reply += '''
                 {2}使用的动车组型号是{1}
                 交路信息详见 https://moerail.ml/#{0}。
             '''.strip().format(i, emu_models[i], foreword)
-            bot.send(context, strip_lines(reply, sep='\n'))
         else:
             return True
+        bot.send(context, strip_lines(reply))
 
     def train_filter(context, i: str) -> bool:
         'Infer the models of other multiple units.'
@@ -284,6 +286,34 @@ class RailwayContext(AttrDict):
         reply = description + '，从%s站始发，终到%s站。'
         return reply % trains[trains[i]], '列车'
 
+    def tracking_filter(context, i)-> bool:
+        'Provide railway shipment tracking service.'
+        if i in known_models:
+            reply = '''
+                {} 的车号应该是 {}，我帮你查一下。
+            '''.strip().format(i, known_models[i])
+            bot.send(context, reply)
+            i = known_models[i]
+        if not i.isdigit() or len(i) != 7:
+            return True
+        elif context.user_id in limit.black_list:
+            bot.send(context, '哼，坏蛋，不告诉你！')
+            return
+        elif 'captcha' not in context:
+            if context.user_id not in limit.administrators and limit():
+                bot.send(context, '哼，不理你了!')
+                return
+            api.query['check_code'] = solve_captcha(api.load_captcha())
+            context.captcha = True
+        result = tracking_handler(i)
+        reply = {
+            '没有满足条件的查询结果！': '找不到 {} 呢。',
+            '货车追踪失败，请稍后再试！': '噫，{}？不告诉你哦~',
+            '验证码错误': '咦，{} 怎么没查出来，等会儿再试试？',
+            None: '{} 没查出来，再试一次吧（',
+        }.get(result, result).format(i)
+        bot.send(context, reply)
+
     def wildcard_filter(context, i: str) -> bool:
         'Match incomplete model names.'
         prefix_matches = sorted(
@@ -301,52 +331,25 @@ class RailwayContext(AttrDict):
                 嗯，{}？我记不清了呢（
             '''.strip().format(description % i)
         else:
-            context.unknown.append(i)
-            return True
+            reply = '%s 是什么车哦，没见过呢' % i
         bot.send(context, reply)
 
-    def query_numbers(context):
-        'Provide railway shipment tracking service.'
-        if context.unknown:
-            models = '、'.join(context.unknown)
-            reply = '%s 是什么车哦，没见过呢' % models
-        elif context.title:
-            reply = '好的，%s' % context.title
-        elif context.identifiers:
-            reply = '好的，知道了'
-        else:
-            numbers = '、'.join(context.numbers)
-            reply = random.choice(['好的，%s', '%s，收到']) % numbers
-        bot.send(context, reply)
 
-        for car, result in batch_tracking(context.numbers):
-            reply = {
-                '没有满足条件的查询结果！': '找不到 %s 呢。' % car,
-                '货车追踪失败，请稍后再试！': '噫，%s？不告诉你哦~' % car,
-                '验证码错误': '你一次问的太多了，记不住了，哼',
-                'JSON': '%s 结尾的车号我没听清呢，能再说一遍吗？' % car[3:],
-            }.get(result, result)
-            bot.send(context, reply)
-
-
-def batch_tracking(cars: Sequence[str]) -> Iterable[Tuple[str, str]]:
+def tracking_handler(car: str) -> str:
     'Response railway shipment queries.'
-    api.query['check_code'] = solve_captcha(api.load_captcha())
-    for car in cars:
-        try:
-            info = api.track_car(car)
-        except AssertionError as e:
-            yield car, e.args[0]
-        except json.decoder.JSONDecodeError as e:
-            print(e.doc)
-            yield car, 'JSON'
-        else:
-            if info.carType:
-                known_models[info.carType] = info.carNo
-            if info.trainId:
-                info.train = get_train_description(info.trainId) % info.trainId
-                info.trainId = None
-            yield car, api.explain(info)
+    try:
+        info = api.track_car(car)
+    except AssertionError as e:
+        return e.args[0]
+    except json.decoder.JSONDecodeError as e:
+        print(e.doc)
+    else:
+        if info.carType:
+            known_models[info.carType] = info.carNo
+        if not info.trainId.isdigit() or int(info.trainId) > 10000:
+            train_number = info.pop('trainId')
+            info.train = get_train_description(train_number) % train_number
+        return api.explain(info)
 
 
 class Limit(AttrDict):

@@ -208,7 +208,7 @@ class RailwayContext(AttrDict):
         bot.send(context, reply.format(context.title))
 
     def abuse_filter(context) -> bool:
-        'Prevent stop words and bad words.'
+        'Throttle the number of messages and remove the stop words.'
         if limit.power_off and context.user_id not in limit.administrators:
             bot.send(context, '下班了，明天见~')
             return
@@ -227,7 +227,13 @@ class RailwayContext(AttrDict):
                 roger = True
 
         if roger:
-            if context.title:
+            if context.user_id in limit.black_list:
+                bot.send(context, '哼，坏蛋，不告诉你！')
+                return
+            elif context.user_id not in limit.administrators and limit():
+                bot.send(context, '哼，不理你了!')
+                return
+            elif context.title:
                 reply = '好的，%s' % context.title
             else:
                 reply = '好的，%s/%s，收到/嗯，%s/%s，明白/%s，知道了'
@@ -297,13 +303,7 @@ class RailwayContext(AttrDict):
             i = known_models[i]
         if not i.isdigit() or len(i) != 7:
             return True
-        elif context.user_id in limit.black_list:
-            bot.send(context, '哼，坏蛋，不告诉你！')
-            return
         elif 'captcha' not in context:
-            if context.user_id not in limit.administrators and limit():
-                bot.send(context, '哼，不理你了!')
-                return
             api.query['check_code'] = solve_captcha(api.load_captcha())
             context.captcha = True
         result = tracking_handler(i)

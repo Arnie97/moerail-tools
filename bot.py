@@ -444,77 +444,61 @@ def parse_trainnets(lines: Iterable[str]) -> Dict[str, Tuple[str, str]]:
     return trainnets
 
 
-def main(config_file: str):
-    'Load the databases.'
+def load_database(name: str, path: str, handler=json.load, default={}):
+    'Load the database into module namespace.'
+    try:
+        with open(path) as f:
+            results = handler(f)
+    except FileNotFoundError:
+        results = default
+    finally:
+        globals()[name] = results
+
+
+def initialize(config_file: str):
+    'Load all the databases.'
     global limit
     limit = Limit()
-    try:
-        with open(config_file) as f:
-            limit.update(json.load(f))
-    except AssertionError:
-        pass
+    with open(config_file) as f:
+        limit.update(json.load(f))
 
-    global known_models
-    try:
-        with open(limit.serial_json) as f:
-            known_models = json.load(f)
-    except:
-        known_models = {}
-
-    global emu_patterns
-    try:
-        with open(limit.emu_json) as f:
-            emu_patterns = json.load(f)[':']
-    except:
-        emu_patterns = {}
-
-    global emu_models
-    emu_models = {}
-    try:
-        with open(limit.emu_text) as f:
-            lines = f.read().splitlines()
-    except:
-        pass
-    else:
-        for line in lines:
-            train, _, model = line.partition(' ')
-            emu_models[train] = model
-
-    global trainnets
-    try:
-        with open(limit.trainnets_text) as f:
-            lines = f.read().splitlines()
-    except:
-        trainnets = {}
-    else:
-        trainnets = parse_trainnets(lines)
-
-    global train_ranges
-    try:
-        with open(limit.trains_text) as f:
-            lines = f.read().splitlines()
-    except:
-        train_ranges = []
-    else:
-        train_ranges = list(parse_train_ranges(lines))
-
-    global trains
-    try:
-        with open(limit.trains_json) as f:
-            print('Loading...')
-            data = load_trains(f.read())
-    except:
-        trains = {}
-    else:
-        routes = parse_trains(data)
-        print('Sorting...')
-        trains = sort_trains(routes)
-        print('Ready.')
-
-    bot.run(host='localhost', port=7700)
-    with open(limit.serial_json, 'w') as f:
-        json.dump(known_models, f)
+    databases = {
+        'known_models': [limit.serial_json],
+        'emu_patterns': [limit.emu_json, lambda f: json.load(f)[':']],
+        'emu_models': [
+            limit.emu_text,
+            lambda f: {
+                train_number: emu_model
+                for line in f.read().splitlines()
+                for train_number, _, emu_model in [line.partition(' ')]
+            },
+        ],
+        'trainnets': [
+            limit.trainnets_text,
+            lambda f: parse_trainnets(f.read().splitlines()),
+        ],
+        'train_ranges': [
+            limit.trains_text,
+            lambda f: list(parse_train_ranges(f.read().splitlines())),
+            [],
+        ],
+        'trains': [
+            limit.trains_json,
+            lambda f: sort_trains(parse_trains(load_trains(f.read()))),
+        ],
+    }
+    for name, params in databases.items():
+        load_database(name, *params)
 
 
 if __name__ == '__main__':
-    main(argv(1) or 'bot_config.json')
+    initialize(argv(1) or 'bot_config.json')
+    try:
+        bot.run(host='localhost', port=7700)
+    except ValueError:  # closed stderr
+        raise
+    finally:
+        print('Committing changes...')
+        with open(limit.serial_json, 'w') as f:
+            json.dump(known_models, f)
+        print('Goodbye.')

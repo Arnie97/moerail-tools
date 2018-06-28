@@ -383,6 +383,11 @@ class TrainRange:
         ignored_prefix, last = self.split(last)
         self.range = range(first, last + 1)
 
+    def __repr__(self):
+        'Provide a text representation for reproducibility.'
+        repr_str = "{0.__class__.__name__}('{0.prefix}{1}', '{0.prefix}{2}')"
+        return repr_str.format(self, self.range.start, self.range.stop - 1)
+
     def __contains__(self, train: str) -> bool:
         'Check whether a train number is in the specified range.'
         try:

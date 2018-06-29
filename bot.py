@@ -182,6 +182,7 @@ class RailwayContext(AttrDict):
                 context.model_filter(i) and
                 context.train_filter(i) and
                 context.tracking_filter(i) and
+                context.wiki_filter(i) and
                 context.wildcard_filter(i)
                 for i in context.identifiers
             )
@@ -334,13 +335,15 @@ class RailwayContext(AttrDict):
             reply = '''
                 嗯，{}？我记不清了呢（
             '''.strip().format(description % i)
-        elif context.wiki_filter():
+        else:
             reply = '%s 是什么哦，没见过呢' % i
         bot.send(context, reply)
 
-    def wiki_filter(context) -> bool:
+    def wiki_filter(context, i=None) -> bool:
         'Return the first article found in a bunch of wiki sites.'
-        titles = re.sub(limit.self, '', context.message).strip()
+        titles = i or re.sub(limit.self, '', context.message).strip()
+        if not titles:
+            return True
         for site in wiki_sites:
             for page in wiki_extract(site, titles):
                 if 'missing' not in page:

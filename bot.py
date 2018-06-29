@@ -2,6 +2,7 @@
 
 import io
 import json
+import mwclient
 import random
 import re
 import sys
@@ -18,6 +19,7 @@ from tracking import solve_captcha, strip_lines, Tracking
 
 bot = CQHttp('http://localhost:5700/')
 api = Tracking()
+wiki = mwclient.Site('zh.wikipedia.org')
 
 
 def unescape(text: str) -> str:
@@ -194,6 +196,8 @@ class RailwayContext(AttrDict):
         else:  # nothing recognized
             if context.identifiers:
                 return True
+            elif not context.wiki_filter():
+                return False  # found in Wikipedia
             response = limit.greetings['^$']
 
         if isinstance(response, str):
@@ -331,9 +335,34 @@ class RailwayContext(AttrDict):
             reply = '''
                 嗯，{}？我记不清了呢（
             '''.strip().format(description % i)
-        else:
-            reply = '%s 是什么车哦，没见过呢' % i
+        elif context.wiki_filter():
+            reply = '%s 是什么哦，没见过呢' % i
         bot.send(context, reply)
+
+    def wiki_filter(context):
+        'Return the article summary from Wikipedia.'
+        titles = re.sub(limit.self, '', context.message).strip()
+        for page in wiki_extract(titles):
+            if 'missing' in page:
+                return True
+            else:
+                bot.send(context, page['extract'])
+
+
+def wiki_extract(titles: str, **kwargs) -> Iterable[Dict]:
+    'Get plain-text extracts of the given wiki articles.'
+    params = dict(
+        prop='extracts',
+        uselang='zh-cn',
+        titles=titles,
+        converttitles=True,
+        redirects=True,
+        explaintext=True,
+        exintro=True,
+        exsentences=2,
+    )
+    params.update(kwargs)
+    yield from wiki.api('query', **params)['query']['pages'].values()
 
 
 def tracking_handler(car: str) -> str:

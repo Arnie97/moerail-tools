@@ -19,7 +19,6 @@ from tracking import solve_captcha, strip_lines, Tracking
 
 bot = CQHttp('http://localhost:5700/')
 api = Tracking()
-wiki = mwclient.Site('zh.wikipedia.org')
 
 
 def unescape(text: str) -> str:
@@ -196,8 +195,8 @@ class RailwayContext(AttrDict):
         else:  # nothing recognized
             if context.identifiers:
                 return True
-            elif not context.wiki_filter():
-                return False  # found in Wikipedia
+            elif not (context.abuse_filter() and context.wiki_filter()):
+                return False  # found in wiki sites
             response = limit.greetings['^$']
 
         if isinstance(response, str):
@@ -339,19 +338,21 @@ class RailwayContext(AttrDict):
             reply = '%s 是什么哦，没见过呢' % i
         bot.send(context, reply)
 
-    def wiki_filter(context):
-        'Return the article summary from Wikipedia.'
+    def wiki_filter(context) -> bool:
+        'Return the first article found in a bunch of wiki sites.'
         titles = re.sub(limit.self, '', context.message).strip()
-        for page in wiki_extract(titles):
-            if 'missing' in page:
-                return True
-            else:
-                bot.send(context, page['extract'])
+        for site in wiki_sites:
+            for page in wiki_extract(site, titles):
+                if 'missing' not in page:
+                    bot.send(context, page['extract'])
+                    return
+        return True
 
 
-def wiki_extract(titles: str, **kwargs) -> Iterable[Dict]:
+def wiki_extract(site: mwclient.Site, titles: str, **kwargs) -> Iterable[Dict]:
     'Get plain-text extracts of the given wiki articles.'
-    params = dict(
+    params = AttrDict(
+        action='query',
         prop='extracts',
         uselang='zh-cn',
         titles=titles,
@@ -362,7 +363,7 @@ def wiki_extract(titles: str, **kwargs) -> Iterable[Dict]:
         exsentences=2,
     )
     params.update(kwargs)
-    yield from wiki.api('query', **params)['query']['pages'].values()
+    yield from site.api(**params)[params.action]['pages'].values()
 
 
 def tracking_handler(car: str) -> str:
@@ -521,6 +522,10 @@ def initialize(config_file: str):
             lambda f: sort_trains(parse_trains(load_trains(f.read()))),
         ],
     }
+    globals()['wiki_sites'] = [
+        mwclient.Site(site)
+        for site in limit.wiki_sites
+    ]
     for name, params in databases.items():
         load_database(name, *params)
 

@@ -69,7 +69,7 @@ def new_msg_wrapper(context):
     context = AttrDict(context)
     context.notified = '[CQ:at,qq=%d]' % context.self_id in context.message
     context.raw_message = context.message
-    context.message = unescape(context.message)
+    context.message = unescape(context.message).strip()
     # print(dict(context))
 
     value = new_msg(context)
@@ -213,15 +213,16 @@ class RailwayContext(AttrDict):
 
     def abuse_filter(context) -> bool:
         'Throttle the number of messages and remove the stop words.'
-        if limit.power_off and context.user_id not in limit.administrators:
+        if re.search(limit.stop_words, context.message):
+            return
+        elif limit.power_off and context.user_id not in limit.administrators:
             bot.send(context, '下班了，明天见~')
             return
+
         roger = False
         original, context.identifiers = context.identifiers, AttrDict()
         for count, (k, v) in enumerate(original.items()):
-            if re.search(limit.stop_words, k):
-                continue
-            elif context.user_id in limit.administrators:
+            if context.user_id in limit.administrators:
                 pass
             elif re.search(limit.bad_words, k) or count >= limit.max_queries:
                 bot.send(context, '哼，不许捣乱！')

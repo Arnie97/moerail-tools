@@ -170,7 +170,7 @@ class RailwayContext(AttrDict):
 
     def __call__(context) -> bool:
         'Response the query.'
-        return (
+        unknown_items = (
             any((
                 context.notified,
                 context.mentioned,
@@ -178,15 +178,26 @@ class RailwayContext(AttrDict):
             )) and
             context.greeting_filter() and
             context.abuse_filter() and
-            any(
+            [
                 context.model_filter(i) and
                 context.train_filter(i) and
                 context.tracking_filter(i) and
                 context.wiki_filter(i) and
                 context.wildcard_filter(i)
                 for i in context.identifiers
-            )
+            ]
         )
+        if not unknown_items:
+            return
+        elif all(unknown_items):
+            unknown_items = context.wiki_filter()
+        else:
+            pairs = zip(unknown_items, context.identifiers.values())
+            unknown_items = [i for unknown, i in pairs if unknown]
+        if any(unknown_items):
+            reply = '%s 是什么哦，没见过呢'
+            reply %= '、'.join(unknown_items)
+            bot.send(context, reply)
 
     def greeting_filter(context) -> bool:
         'Get the corresponding greeting messages for preset keywords.'
@@ -337,20 +348,20 @@ class RailwayContext(AttrDict):
                 嗯，{}？我记不清了呢（
             '''.strip().format(description % i)
         else:
-            reply = '%s 是什么哦，没见过呢' % i
+            return True
         bot.send(context, reply)
 
-    def wiki_filter(context, i=None) -> bool:
+    def wiki_filter(context, i=None) -> list:
         'Return the first article found in a bunch of wiki sites.'
         titles = i or re.sub(limit.self, '', context.message).strip()
         if not titles:
-            return True
+            return [titles]
         for site in wiki_sites:
             for page in wiki_extract(site, titles):
                 if 'missing' not in page:
                     bot.send(context, page['extract'])
                     return
-        return True
+        return [titles]
 
 
 def wiki_extract(site: mwclient.Site, titles: str, **kwargs) -> Iterable[Dict]:

@@ -8,7 +8,7 @@ import re
 import sys
 import time
 from contextlib import redirect_stdout, redirect_stderr
-from itertools import chain
+from itertools import chain, islice
 from subprocess import run, PIPE
 from string import ascii_uppercase
 from typing import Dict, Iterable, Tuple
@@ -357,10 +357,17 @@ class RailwayContext(AttrDict):
         if not titles:
             return [titles]
         for site in wiki_sites:
-            for page in wiki_extract(site, titles):
-                if 'missing' not in page:
-                    bot.send(context, page['extract'])
-                    return
+            page = AttrDict(next(wiki_extract(site, titles)))
+            if 'missing' in page:
+                continue
+            elif '。' not in page.extract:
+                page = AttrDict(next(wiki_extract(
+                    site, titles, exintro=None, exsentences=None
+                )))
+                non_empty_lines = filter(None, page.extract.splitlines())
+                page.extract = '\n'.join(islice(non_empty_lines, 5))
+            bot.send(context, page.extract)
+            return
         return [titles]
 
 

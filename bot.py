@@ -282,6 +282,14 @@ class RailwayContext(AttrDict):
                 {2}使用的动车组型号是{1}
                 交路信息详见 https://moerail.ml/#{0}。
             '''.strip().format(i, emu_models[i], foreword)
+        elif i in cr_express:
+            reply = '''
+                {2} 次{1}班列，由{5}站始发，终到{6}站
+                {10[，经由{}]}。列车{12[速度标尺为{}，]}
+                {4[装车站为{}，]}{7[卸车站为{}；]}编组为{9}。
+                {13[{}。]}
+            '''
+            reply = api.format(reply.strip(), *cr_express[i])
         else:
             return True
         bot.send(context, strip_lines(reply))
@@ -542,6 +550,14 @@ def initialize(config_file: str):
         'trains': [
             limit.trains_json,
             lambda f: sort_trains(parse_trains(load_trains(f.read()))),
+        ],
+        'cr_express': [
+            limit.express_json,
+            lambda f: {
+                train_number: record
+                for record in json.load(f)
+                for train_number in record[2].split('/')
+            },
         ],
     }
     globals()['wiki_sites'] = [

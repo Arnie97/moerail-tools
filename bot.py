@@ -267,15 +267,16 @@ class RailwayContext(AttrDict):
                 有没有车迷记录 {0} 的配属状况。
             '''.strip().format(i)
         elif i in trainnets:
-            reply = '''
-                {0[1]}
-                详见 https://trainnets.com/archives/{0[0]}。
-                {1}
-            '''.strip().format(
-                trainnets[i],
-                '如果你想追踪它的话，可以用 %s 这个车号。' % known_models[i]
-                if i in known_models else ''
-            )
+            url, reply = trainnets[i]
+            if ':' == url:
+                pass
+            elif ':' in url:
+                reply += '详见 %s。' % url
+            else:
+                reply += '详见 https://trainnets.com/archives/%s。' % url
+            if i in known_models:
+                serial = known_models[i]
+                reply += '如果你想追踪它的话，可以用 %s 这个车号。' % serial
         elif i in emu_models:
             reply, foreword = context.get_train_route(i)
             reply += '''

@@ -190,7 +190,7 @@ class RailwayContext(AttrDict):
         if not unknown_items:
             return
         elif all(unknown_items):
-            unknown_items = context.wiki_filter()
+            unknown_items = [context.wiki_filter()]
         else:
             pairs = zip(unknown_items, context.identifiers.values())
             unknown_items = [i for unknown, i in pairs if unknown]
@@ -360,11 +360,14 @@ class RailwayContext(AttrDict):
             return True
         bot.send(context, reply)
 
-    def wiki_filter(context, i=None) -> list:
+    def wiki_filter(context, i=None) -> bool:
         'Return the first article found in a bunch of wiki sites.'
-        titles = i or re.sub(limit.self, '', context.message).strip()
+        if i:
+            titles = context.identifiers[i]
+        else:
+            titles = re.sub(limit.self, '', context.message).strip()
         if not titles:
-            return [titles]
+            return True
         for site in wiki_sites:
             page = AttrDict(next(wiki_extract(site, titles)))
             if 'missing' in page:
@@ -377,7 +380,7 @@ class RailwayContext(AttrDict):
                 page.extract = '\n'.join(islice(non_empty_lines, 5))
             bot.send(context, page.extract)
             return
-        return [titles]
+        return titles
 
 
 def wiki_extract(site: mwclient.Site, titles: str, **kwargs) -> Iterable[Dict]:

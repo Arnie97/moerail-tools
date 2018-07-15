@@ -220,7 +220,8 @@ class RailwayContext(AttrDict):
         else:
             reply = 0
         reply = random.choice(response[reply].split('|'))
-        bot.send(context, reply.format(context.title))
+        if reply:
+            bot.send(context, reply.format(context.title))
 
     def abuse_filter(context) -> bool:
         'Throttle the number of messages and remove the stop words.'

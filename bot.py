@@ -302,7 +302,7 @@ class RailwayContext(AttrDict):
         for model, pattern in emu_patterns.items():
             if re.match(pattern, i):
                 reply += '''
-                    {2}使用的动车组型号应该是{1}。
+                    {2}使用的动车组型号是{1}。
                 '''.strip().format(i, model, foreword)
                 break
         else:
@@ -354,9 +354,16 @@ class RailwayContext(AttrDict):
                 {0}… 你指的是 {1} 之类的吗？
             '''.strip().format(i, '、'.join(prefix_matches))
         elif len(description) > 6:
-            reply = '''
-                嗯，{}？我记不清了呢（
-            '''.strip().format(description % i)
+            reply = '嗯，{}？'.format(description % i)
+            train_number = re.sub(r'\D', '', i)
+            if train_number in known_traces:
+                trace = '''
+                    我在{eventAdm}的{eventStation}站见过呢，
+                    机后第 {trainOrder} 位拉着编号 {carNo} 的 {carType}。
+                '''.strip().format_map(known_traces[train_number])
+                reply += strip_lines(trace)
+            else:
+                reply += '我记不清了呢（'
         else:
             return True
         bot.send(context, reply)
@@ -413,8 +420,10 @@ def tracking_handler(car: str) -> str:
         if info.carType:
             known_models[info.carType] = info.carNo
         if not info.trainId.isdigit() or int(info.trainId) > 10000:
-            train_number = info.pop('trainId')
-            info.train = get_train_description(train_number) % train_number
+            if info.trainOrder and info.eventAdm:
+                known_traces[re.sub(r'\D', '', info.trainId)] = info.copy()
+            info.train = get_train_description(info.trainId) % info.trainId
+            info.pop('trainId')
         return api.explain(info)
 
 
@@ -483,6 +492,10 @@ def get_train_description(train: str) -> str:
         else:
             results.append(tr.category)
     if len(results) == 1:
+        if not train.isdigit():
+            train = re.sub(r'\D', '', train)
+            if train and int(train) > 10000:
+                return get_train_description(train)
         results.append('列车')
     return ''.join(results)
 
@@ -534,6 +547,7 @@ def initialize(config_file: str):
 
     databases = {
         'known_models': [limit.serial_json],
+        'known_traces': [limit.traces_json],
         'emu_patterns': [limit.emu_json, lambda f: json.load(f)[':']],
         'emu_models': [
             limit.emu_text,
@@ -583,4 +597,6 @@ if __name__ == '__main__':
         print('Committing changes...')
         with open(limit.serial_json, 'w') as f:
             json.dump(known_models, f)
+        with open(limit.traces_json, 'w') as f:
+            json.dump(known_traces, f)
         print('Goodbye.')

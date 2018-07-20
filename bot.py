@@ -527,13 +527,13 @@ def parse_trainnets(lines: Iterable[str]) -> Dict[str, Tuple[str, str]]:
     return trainnets
 
 
-def load_database(name: str, path: str, handler=json.load, default={}):
+def load_database(name: str, path: str, handler=json.load, default=None):
     'Load the database into module namespace.'
     try:
         with open(path) as f:
             results = handler(f)
     except FileNotFoundError:
-        results = default
+        results = default or {}
     finally:
         globals()[name] = results
 

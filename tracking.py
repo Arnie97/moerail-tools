@@ -60,7 +60,7 @@ class Tracking(API):
     def explain(self, info: AttrDict) -> str:
         'Format the query results.'
         info.arrDep = dict(A='到达', D='离开').get(info.arrDepId, '到达')
-        if not info.wbID:
+        if not info.wbID or info.wbID == '-1':
             info.wbID = info.wbNbr
         if info.carType.startswith(info.carKind):
             info.carKind = '车辆'
@@ -83,10 +83,10 @@ class Tracking(API):
         '''
 
         explanation %= '''
-        已被编入由{cdyAdm}{cdyStation}站
-        开{destAdm[往{}]}{destStation[{}站]}的
-        {trainId[ {} 次列车]}{train[{}]}机后第 {trainOrder} 位，%s。
-        该列车现
+        已从{cdyAdm}{cdyStation}站发出，
+        {destStation[前往{destAdm}{}站，]}%s。
+        该车现被编入{trainId[ {} 次列车]}{train[{}]}
+        机后第 {trainOrder} 位，目前
         ''' % status if int(info.trainOrder) else ''
 
         return self.format(strip_lines(explanation), **info)

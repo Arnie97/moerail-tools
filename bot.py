@@ -373,14 +373,19 @@ class RailwayContext(AttrDict):
         if i:
             titles = context.identifiers[i]
         else:
-            titles = re.sub(limit.self, '', context.message).strip()
+            titles = context.message
+            for stop_words in [limit.stop_words, limit.self, r'^\W+']:
+                titles = re.sub(stop_words, '', titles)
         if not titles:
             return True
         for site in wiki_sites:
             page = AttrDict(next(wiki_extract(site, titles)))
             if 'missing' in page:
                 continue
-            elif '。' not in page.extract:
+            # based on code from OpenSearchXml by Brion Vibber
+            sentence_boundaries = r'[.!?](?:[ \n]|$)|[。．！？｡]'
+            # use the first five lines as text extract if no sentences found
+            if not re.search(sentence_boundaries, page.extract):
                 page = AttrDict(next(wiki_extract(
                     site, titles, exintro=None, exsentences=None
                 )))

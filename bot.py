@@ -7,6 +7,7 @@ import random
 import re
 import sys
 import time
+from concurrent.futures import ThreadPoolExecutor
 from contextlib import redirect_stdout, redirect_stderr
 from itertools import chain, islice
 from subprocess import run, PIPE
@@ -378,8 +379,13 @@ class RailwayContext(AttrDict):
                 titles = re.sub(stop_words, '', titles)
         if not titles:
             return True
-        for site in wiki_sites:
-            page = AttrDict(next(wiki_extract(site, titles)))
+
+        with ThreadPoolExecutor() as executor:
+            pages = executor.map(
+                lambda site: AttrDict(next(wiki_extract(site, titles))),
+                wiki_sites
+            )
+        for page, site in zip(pages, wiki_sites):
             if 'missing' in page:
                 continue
             # based on code from OpenSearchXml by Brion Vibber

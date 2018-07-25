@@ -38,30 +38,28 @@ def unescape(text: str) -> str:
     return text
 
 
-@bot.on_event('group_increase')
-def new_group_member(context):
-    'Send the welcome message.'
-    bot.send(context, '群地位-1')
+@bot.on_notice()
+def new_notice(context, reply=None):
+    'Detect file uploads and new group members.'
+    context = AttrDict(context)
+    if context.group_id not in limit.railway_groups:
+        return
+    elif context.notice_type == 'group_upload':
+        if context.file['name'] == 'base.apk':
+            reply = '怎么又双叒叕是 base.apk [CQ:face,id=39]'
+    elif context.notice_type == 'group_increase':
+        reply = '群地位-1'
+    if reply:
+        context.message_type = 'group'
+        bot.send(context, reply)
 
 
-@bot.on_event('group_upload')
-def new_group_file(context):
-    'Detect file uploads.'
-    reply = (
-        '怎么又双叒叕是 base.apk [CQ:face,id=39]'
-        if context['file']['name'] == 'base.apk'
-        else '诶，我看看传了什么'
-    )
-    bot.send(context, reply)
-
-
-@bot.on_request('group', 'friend')
+@bot.on_request()
 def new_friend(context):
     'Accepts friend requests from administrators.'
     if context['user_id'] in limit.administrators:
         return {'approve': True}
-    for i in limit.administrators:
-        bot.send_private_msg(user_id=i, message=context)
+    print(context)
 
 
 @bot.on_message()
@@ -165,8 +163,10 @@ def match_identifiers(text: str, remove='-') -> AttrDict:
 
 class RailwayContext(AttrDict):
 
-    def __init__(self, context):
+    def __init__(self, context=None):
         'Search the keywords in the received message.'
+        if context is None:
+            return super().__init__()
         self.update(
             bot.get_group_member_info(**context)
             if context.message_type == 'group'

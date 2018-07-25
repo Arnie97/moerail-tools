@@ -116,7 +116,14 @@ def parse_loopback(context) -> bool:
         if group_key in group['group_name']
     ]
     if len(matches) == 1:
-        bot.send_group_msg(group_id=matches[0]['group_id'], message=text)
+        target_group = matches[0]['group_id']
+        operator = AttrDict(bot.get_group_member_info(
+            group_id=target_group, user_id=context.user_id
+        ))
+        operator.name = operator.card or operator.nickname
+        operator_info = '[{title}] {name} ({user_id})'.format_map(operator)
+        print(operator_info, context.raw_message)
+        bot.send_group_msg(group_id=target_group, message=text)
     else:
         reply = '「%s」指的是哪个群呢？' % group_key
         reply += '\n' + '\n'.join(

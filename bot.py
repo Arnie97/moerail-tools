@@ -1,8 +1,10 @@
 #!/usr/bin/env python3
 
+import datetime
 import io
 import json
 import mwclient
+import platform
 import random
 import re
 import sys
@@ -144,9 +146,16 @@ def parse_shell(context) -> str:
         return result.getvalue().strip()
 
     elif context.message.startswith('//'):
-        limit.power_off = not limit.power_off
-        if limit.power_off:
-            return '下班喽~'
+        try:
+            limit.railway_groups[context.group_id] ^= True  # toggle
+        except KeyError:
+            uptime = datetime.timedelta(seconds=time.monotonic())
+            uptime_hms = time.strftime('%H:%M:%S', time.gmtime(uptime.seconds))
+            reply = '{0.node} (up {1} days, {2})\n{0.system} {0.release}'
+            return reply.format(platform.uname(), uptime.days, uptime_hms)
+        else:
+            enabled = limit.railway_groups[context.group_id]
+            return '我回来啦（' if enabled else '下班喽~'
 
     elif context.message_type == 'private':
         return dict(reply=context.raw_message, auto_escape=True)
@@ -235,9 +244,10 @@ class RailwayContext(AttrDict):
         'Throttle the number of messages and remove the stop words.'
         if re.search(limit.stop_words, context.message):
             return
-        elif limit.power_off and context.user_id not in limit.administrators:
-            bot.send(context, '下班了，明天见~')
-            return
+        elif not limit.railway_groups.get(context.group_id, True):
+            if context.user_id not in limit.administrators:
+                bot.send(context, '下班了，明天见~')
+                return
 
         roger = False
         original, context.identifiers = context.identifiers, AttrDict()
@@ -562,6 +572,7 @@ def initialize(config_file: str):
     limit = Limit()
     with open(config_file) as f:
         limit.update(json.load(f))
+    limit.railway_groups = {k: True for k in limit.get('railway_groups', [])}
 
     databases = {
         'known_models': [limit.serial_json],

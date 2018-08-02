@@ -572,7 +572,13 @@ def initialize(config_file: str):
     limit = Limit()
     with open(config_file) as f:
         limit.update(json.load(f))
-    limit.railway_groups = {k: True for k in limit.get('railway_groups', [])}
+
+    key = 'railway_groups'
+    limit[key] = {group: True for group in limit.get(key, [])}
+
+    key = 'wiki_sites'
+    with ThreadPoolExecutor() as executor:
+        globals()[key] = list(executor.map(mwclient.Site, limit.get(key, [])))
 
     databases = {
         'known_models': ['serial_json'],
@@ -608,10 +614,6 @@ def initialize(config_file: str):
             },
         ],
     }
-    globals()['wiki_sites'] = [
-        mwclient.Site(site)
-        for site in limit.wiki_sites
-    ]
     for name, (filename, *params) in databases.items():
         if filename in limit:
             filename = limit[filename]

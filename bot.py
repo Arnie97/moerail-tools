@@ -575,11 +575,11 @@ def initialize(config_file: str):
     limit.railway_groups = {k: True for k in limit.get('railway_groups', [])}
 
     databases = {
-        'known_models': [limit.serial_json],
-        'known_traces': [limit.traces_json],
-        'emu_patterns': [limit.emu_json, lambda f: json.load(f)[':']],
+        'known_models': ['serial_json'],
+        'known_traces': ['traces_json'],
+        'emu_patterns': ['emu_json', lambda f: json.load(f)[':']],
         'emu_models': [
-            limit.emu_text,
+            'emu_text',
             lambda f: {
                 train_number: emu_model
                 for line in f.read().splitlines()
@@ -587,20 +587,20 @@ def initialize(config_file: str):
             },
         ],
         'trainnets': [
-            limit.trainnets_text,
+            'trainnets_text',
             lambda f: parse_trainnets(f.read().splitlines()),
         ],
         'train_ranges': [
-            limit.trains_text,
+            'trains_text',
             lambda f: list(parse_train_ranges(f.read().splitlines())),
             [],
         ],
         'trains': [
-            limit.trains_json,
+            'trains_json',
             lambda f: sort_trains(parse_trains(load_trains(f.read()))),
         ],
         'cr_express': [
-            limit.express_json,
+            'express_json',
             lambda f: {
                 train_number: record
                 for record in json.load(f)
@@ -612,8 +612,12 @@ def initialize(config_file: str):
         mwclient.Site(site)
         for site in limit.wiki_sites
     ]
-    for name, params in databases.items():
-        load_database(name, *params)
+    for name, (filename, *params) in databases.items():
+        if filename in limit:
+            filename = limit[filename]
+        else:
+            limit[filename] = filename
+        load_database(name, filename, *params)
 
 
 if __name__ == '__main__':

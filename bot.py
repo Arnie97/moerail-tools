@@ -7,14 +7,16 @@ import mwclient
 import platform
 import random
 import re
+import requests
 import sys
 import time
 from concurrent.futures import ThreadPoolExecutor
 from contextlib import redirect_stdout, redirect_stderr
 from itertools import chain, islice
-from subprocess import run, PIPE
 from string import ascii_uppercase
+from subprocess import run, PIPE
 from typing import Dict, Iterable, Tuple
+
 from cqhttp import CQHttp
 from util import argv, open, AttrDict
 from trains import load_trains, parse_trains, sort_trains
@@ -200,6 +202,7 @@ class RailwayContext(AttrDict):
                 context.train_filter(i) and
                 context.tracking_filter(i) and
                 context.wiki_filter(i) and
+                context.winsky_filter(i) and
                 context.wildcard_filter(i)
                 for i in context.identifiers
             ]
@@ -418,6 +421,21 @@ class RailwayContext(AttrDict):
             return
         return titles
 
+    def winsky_filter(context, i) -> bool:
+        'Return the first matching item from the aircraft database.'
+        reply = '''
+            {注册号} 的机型为 {机型}，{发动机型号[采用 {} 发动机，]}
+            {首次交付[于 {} 首次交付，]}{引进日期[{} 引入]}{运营机构[{}运营，]}
+            目前状态为{状态}。{备注[{}。]}
+        '''
+        i = context.identifiers[i]
+        for aircraft in winsky_handler(i):
+            if aircraft.get('注册号') == i:
+                reply = api.format(reply.strip(), **aircraft)
+                bot.send(context, strip_lines(reply))
+                return
+        return True
+
 
 def wiki_extract(site: mwclient.Site, titles: str, **kwargs) -> Iterable[Dict]:
     'Get plain-text extracts of the given wiki articles.'
@@ -434,6 +452,16 @@ def wiki_extract(site: mwclient.Site, titles: str, **kwargs) -> Iterable[Dict]:
     )
     params.update(kwargs)
     yield from site.api(**params)[params.action]['pages'].values()
+
+
+def winsky_handler(registration: str) -> Iterable[AttrDict]:
+    'Identify a civil aircraft by its registration number.'
+    url = 'http://winskywebapp.vipsinaapp.com/winsky/index.php'
+    url += '/home/PlaneInfo/getById?parameter=' + registration
+    page = requests.get(url).text
+    matches = re.findall(r'<td><b>([^<]+)</b></td>\s+<td>([^<]*)</td>', page)
+    for i in range(0, len(matches), 10):
+        yield AttrDict(matches[i:i + 10])
 
 
 def tracking_handler(car: str) -> str:

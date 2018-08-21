@@ -429,6 +429,8 @@ class RailwayContext(AttrDict):
             目前状态为{状态}。{备注[{}。]}
         '''
         i = context.identifiers[i]
+        if not i.startswith('B-'):
+            return True
         for aircraft in winsky_handler(i):
             if aircraft.get('注册号') == i:
                 reply = api.format(reply.strip(), **aircraft)
@@ -458,7 +460,7 @@ def winsky_handler(registration: str) -> Iterable[AttrDict]:
     'Identify a civil aircraft by its registration number.'
     url = 'http://winskywebapp.vipsinaapp.com/winsky/index.php'
     url += '/home/PlaneInfo/getById?parameter=' + registration
-    page = requests.get(url).text
+    page = requests.get(url).text.replace(',', '，')
     matches = re.findall(r'<td><b>([^<]+)</b></td>\s+<td>([^<]*)</td>', page)
     for i in range(0, len(matches), 10):
         yield AttrDict(matches[i:i + 10])

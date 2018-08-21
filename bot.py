@@ -201,19 +201,21 @@ class RailwayContext(AttrDict):
                 context.model_filter(i) and
                 context.train_filter(i) and
                 context.tracking_filter(i) and
-                context.wiki_filter(i) and
-                context.winsky_filter(i) and
-                context.wildcard_filter(i)
+                context.winsky_filter(i)
                 for i in context.identifiers
             ]
         )
         if not unknown_items:
             return
-        elif all(unknown_items):
-            unknown_items = [context.wiki_filter()]
-        else:
-            pairs = zip(unknown_items, context.identifiers.values())
-            unknown_items = [i for unknown, i in pairs if unknown]
+        elif all(unknown_items) and not context.wiki_filter():
+            return
+        unknown_items = [
+            context.identifiers[i]
+            for unknown, i in zip(unknown_items, context.identifiers)
+            if unknown and
+            context.wiki_filter(i) and
+            context.wildcard_filter(i)
+        ]
         if any(unknown_items):
             reply = '%s 是什么哦，没见过呢'
             reply %= '、'.join(unknown_items)

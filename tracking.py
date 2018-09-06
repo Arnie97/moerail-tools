@@ -21,8 +21,6 @@ class Tracking(API):
         self.query = {
             'mathsid': re.search(pattern, response.text).group(1),
             'hwzz.yzm': '63FD155B6A364CB4BC1680C1F74B4B37',
-            'hwzz.type': 1,
-            'hwzz.hph': '',
         }
 
     def load_captcha(self) -> io.BytesIO:
@@ -39,30 +37,54 @@ class Tracking(API):
         self.query['check_code'] = answer
         self.track_car(test_case)
 
-    def track_car(self, car_no: str) -> AttrDict:
-        'Track your rail shipment by car number.'
-        self.query['hwzz.carNo'] = car_no
-        response = self.fetch('hwzz_uouii.action', self.query)
+    def track(self, **kwargs) -> AttrDict:
+        'Send the tracking request and parse the response message.'
+        # insert the namespace prefix for each key
+        data = {'hwzz.' + k: v for k, v in kwargs.items()}
+        data.update(self.query)
+        response = self.fetch('hwzz_uouii.action', data)
         assert response.success, response.get('message', response.get('msg'))
         return AttrDict(response.object[0])
 
+    def track_car(self, car_no: str) -> AttrDict:
+        'Track your rail shipment by car number.'
+        assert len(car_no) == 7, 'Illegal car number'
+        return self.track(type=1, carNo=car_no, hph='')
+
+    def track_container(self, container_no: str) -> AttrDict:
+        'Track your rail shipment by container number.'
+        assert len(container_no) == 11, 'Illegal container number'
+        return self.track(type=5, xz=container_no[:4], xh=container_no[4:])
+
     def repl_handler(self, line: str):
         'Catch the exceptions and print the error messages.'
+        method = self.track_car if line.isdigit() else self.track_container
         try:
-            car_info = self.track_car(line.strip())
-        except AssertionError as e:
+            info = method(line)
+        except (AssertionError, KeyError) as e:
             print(e)
         else:
-            print(self.explain(car_info))
+            print(self.explain(info))
         finally:
             print()
 
     def explain(self, info: AttrDict) -> str:
         'Format the query results.'
-        info.arrDep = dict(A='到达', D='离开').get(info.arrDepId, '到达')
+        converters = {
+            'fz': 'cdyStation',
+            'dz': 'destStation',
+            'pm': 'cdyName',
+            'xh': 'carNo',
+            'tyrName': 'conName',
+        }
+        for k, v in converters.items():
+            info[v] = info[v] or info[k]
         if not info.wbID or info.wbID == '-1':
             info.wbID = info.wbNbr
-        if info.carType.startswith(info.carKind):
+        if info.xh:
+            info.carKind = '集装箱'
+            info.carLE = 'L' if info.cdyName else 'E'
+        elif info.carType.startswith(info.carKind):
             info.carKind = '车辆'
         if info.carLE == 'L':
             status = '负责运送{wbID[编号为 {} 的]}{cdyName}'
@@ -72,22 +94,28 @@ class Tracking(API):
             status = '当前状态为{cdyName}{wbID[，编号为 {}]}'
             if info.cdyName.endswith('空'):
                 info.cdyName += '车'
+            elif not info.cdyName.strip():
+                info.cdyName = '空'
+        info.arrDep = {
+            '': dict(A='到达', D='离开').get(info.arrDepId),
+            '在站': '到达',
+            '在途': '离开',
+        }.get(info.xt) or '到达'
 
         explanation = '''
         截至 {eventDate} 时为止，您查询的{conName[由{}托运的]}
         {carNo[ {} 号]}{carType[ {} 型]}{carKind}
-
-        %s已{arrDep}{eventProvince[位于{}{eventCity}的]}
+        {cdyStation[已从{cdyAdm}{}站发出，]}
+        {destStation[前往{destAdm}{}站，]}%s。
+        该车%s目前已{arrDep}{eventProvince[位于{}{eventCity}的]}
         {eventAdm}{eventStation}站
         {dzlc[，距离终点站{destStation}站还有 {} km]}。
         '''
 
-        explanation %= '''
-        已从{cdyAdm}{cdyStation}站发出，
-        {destStation[前往{destAdm}{}站，]}%s。
-        该车现被编入{trainId[ {} 次列车]}{train[{}]}
-        机后第 {trainOrder} 位，目前
-        ''' % status if int(info.trainOrder) else ''
+        explanation %= status, '''
+        现被编入{trainId[ {} 次列车]}{train[{}]}
+        机后第 {trainOrder} 位，
+        ''' if info.trainOrder else ''
 
         return self.format(strip_lines(explanation), **info)
 

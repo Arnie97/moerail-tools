@@ -350,7 +350,7 @@ class RailwayContext(AttrDict):
             '''.strip().format(i, known_models[i])
             bot.send(context, reply)
             i = known_models[i]
-        if not i.isdigit() or len(i) != 7:
+        if not re.fullmatch(r'([A-Z]{4})?[0-9]{7}', i):  # cars or containers
             return True
         elif 'captcha' not in context:
             api.query['check_code'] = solve_captcha(api.load_captcha())
@@ -361,6 +361,7 @@ class RailwayContext(AttrDict):
             '货车追踪失败，请稍后再试！': '噫，{}？不告诉你哦~',
             '验证码错误': '咦，{} 怎么没查出来，等会儿再试试？',
             None: '{} 没查出来，再试一次吧（',
+            0: '找不到这个集装箱呢。',
         }.get(result, result).format(i)
         bot.send(context, reply)
 
@@ -468,18 +469,21 @@ def winsky_handler(registration: str) -> Iterable[AttrDict]:
         yield AttrDict(matches[i:i + 10])
 
 
-def tracking_handler(car: str) -> str:
+def tracking_handler(number: str) -> str:
     'Response railway shipment queries.'
+    method = api.track_car if number.isdigit() else api.track_container
     try:
-        info = api.track_car(car)
-    except AssertionError as e:
+        info = method(number)
+    except (AssertionError, KeyError) as e:
         return e.args[0]
     except json.decoder.JSONDecodeError as e:
         print(e.doc)
     else:
         if info.carType:
             known_models[info.carType] = info.carNo
-        if not info.trainId.isdigit() or int(info.trainId) > 10000:
+        if not info.trainId:
+            pass
+        elif not info.trainId.isdigit() or int(info.trainId) > 10000:
             if info.trainOrder and info.eventAdm:
                 known_traces[re.sub(r'\D', '', info.trainId)] = info.copy()
             info.train = get_train_description(info.trainId) % info.trainId

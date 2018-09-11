@@ -6,6 +6,7 @@ import json
 import os.path
 import re
 import requests
+from getpass import getpass
 from typing import BinaryIO, Iterable, Tuple
 from urllib.parse import unquote
 
@@ -31,6 +32,7 @@ class API:
         with open(self.persist) as f:
             cj = requests.utils.cookiejar_from_dict(json.load(f))
             self.session.cookies = cj
+        self.init_query_path()
 
     def fetch(self, path, params=None, method='POST', json=True, **kwargs):
         'Initiate an API request.'
@@ -43,10 +45,16 @@ class API:
         response = self.session.request(method, url, **kwargs)
         return AttrDict(response.json()) if json else response
 
+    def init_query_path(self):
+        'Get the API endpoint, which varies between "queryA" and "queryZ".'
+        response = self.fetch('otn/leftTicket/init', json=False)
+        query_path_pattern = re.compile("var CLeftTicketUrl = '(.+)';")
+        self.query_path = query_path_pattern.search(response.text).group(1)
+
     def query(self, depart: str, arrive: str, date=today, student=False):
         'List trains between two stations.'
         response = self.fetch(
-            'otn/leftTicket/query',
+            'otn/' + self.query_path,
             method='GET', params=AttrDict([
                 ('leftTicketDTO.train_date', date),
                 ('leftTicketDTO.from_station', depart),
@@ -182,7 +190,7 @@ def main():
         x.show_captcha()
         coordinates = x.input_captcha()
         x.check_captcha(coordinates)
-        x.login(username=input('Login: '), password=input('Password: '))
+        x.login(username=input('Login: '), password=getpass())
 
     Z53 = x.query('SJP', 'WCN')[-1]
     print(dict(x.left_tickets(Z53[0])))

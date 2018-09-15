@@ -9,52 +9,57 @@ from tickets import show_image, API
 
 
 class Tracking(API):
-    'http://hyfw.95306.cn/gateway/hywx/TrainWebClient/'
+    'http://hyfw.95306.cn/gateway/DzswNewD2D/Dzsw/'
 
     def __init__(self):
         'Initialize the session.'
         self.format = FilterFormatter().format
         self.session = requests.Session()
         self.params = {}
-        response = self.fetch('hwzzPage.action', method='GET', json=False)
-        pattern = '<input id="maths" .+? value="(.+?)" />'
-        self.query = {
-            'mathsid': re.search(pattern, response.text).group(1),
-            'hwzz.yzm': '63FD155B6A364CB4BC1680C1F74B4B37',
-        }
+        self.fetch('page/business-chcx-hwzzsy', method='GET', json=False)
 
     def load_captcha(self) -> io.BytesIO:
         'Fetch the CAPTCHA image.'
-        params = dict(math=0, update=self.query['mathsid'])
         response = self.fetch(
             'security/jcaptcha.jpg',
-            method='GET', params=params, json=False,
+            method='GET', json=False,
         )
         return io.BytesIO(response.content)
 
-    def check_captcha(self, answer: str, test_case='1234567'):
-        'Check whether the CAPTCHA answers are correct.'
-        self.query['check_code'] = answer
-        self.track_car(test_case)
+    def check_captcha(self):
+        'Load and answer the CAPTCHA to get a valid session.'
+        captcha_image = self.load_captcha()
+        try:
+            return solve_captcha(captcha_image)
+        except ImportError as e:
+            print(e)
+            show_image(captcha_image)
+            return input('# ').strip()
+        except AssertionError as e:
+            return self.check_captcha()
 
-    def track(self, **kwargs) -> AttrDict:
+    def track(self, path: str, **data) -> AttrDict:
         'Send the tracking request and parse the response message.'
-        # insert the namespace prefix for each key
-        data = {'hwzz.' + k: v for k, v in kwargs.items()}
-        data.update(self.query)
-        response = self.fetch('hwzz_uouii.action', data)
+        path = (
+            'action/ChcxAction_query%s;DZSW_SESSIONID=Gtnad16GUaNSpTSnWR1_'
+            '-H5zsKIBvKgnao0eRvMR9c97gLekevwj!2012403419'
+        ) % path
+        data['QUERY_CAPTCA'] = self.check_captcha()
+        response = self.fetch(path, data)
         assert response.success, response.get('message', response.get('msg'))
         return AttrDict(response.object[0])
 
     def track_car(self, car_no: str) -> AttrDict:
         'Track your rail shipment by car number.'
         assert len(car_no) == 7, 'Illegal car number'
-        return self.track(type=1, carNo=car_no, hph='')
+        return self.track('HwzzInfoByCarNo', carNo=car_no, hph='')
 
     def track_container(self, container_no: str) -> AttrDict:
         'Track your rail shipment by container number.'
         assert len(container_no) == 11, 'Illegal container number'
-        return self.track(type=5, xz=container_no[:4], xh=container_no[4:])
+        return self.track(
+            'XhInfoByJzxNo', xz=container_no[:4], xh=container_no[4:]
+        )
 
     def repl_handler(self, line: str):
         'Catch the exceptions and print the error messages.'
@@ -127,34 +132,14 @@ def strip_lines(text: str, sep='') -> str:
 
 def solve_captcha(captcha_image: io.BytesIO) -> str:
     'Solve the CAPTCHA image.'
-    from captcha.captcha import image_filter, solve
-    captcha_image = image_filter(captcha_image)
-    template_image = module_dir('captcha/tests/templates/95306.bmp')
-    answer_digits = solve(captcha_image, template_image)
-    return ''.join(map(str, answer_digits))
-
-
-def auth():
-    'Load and answer the CAPTCHA to get a valid session.'
-    x = Tracking()
-    captcha_image = x.load_captcha()
-    try:
-        answer = solve_captcha(captcha_image)
-        x.check_captcha(answer)
-    except (ImportError, AssertionError) as e:
-        print(e)
-        show_image(captcha_image)
-    else:
-        return x
-
-    while True:
-        try:
-            x.check_captcha(input('# ').strip())
-        except AssertionError as e:
-            print(e)
-        else:
-            return x
+    import pytesseract
+    from captcha.captcha import image_filter, remove_noise, vertical_align
+    captcha_image = image_filter(captcha_image, threshold=160)
+    captcha_image = vertical_align(remove_noise(captcha_image, radius=2))
+    answer = pytesseract.image_to_string(captcha_image)
+    assert len(answer) == 5
+    return answer
 
 
 if __name__ == '__main__':
-    repl(auth().repl_handler)
+    repl(Tracking().repl_handler)

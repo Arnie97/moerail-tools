@@ -20,7 +20,7 @@ from typing import Dict, Iterable, Tuple
 from cqhttp import CQHttp
 from util import argv, open, AttrDict
 from trains import load_trains, parse_trains, sort_trains
-from tracking import solve_captcha, strip_lines, Tracking
+from tracking import strip_lines, Tracking
 
 bot = CQHttp('http://localhost:5700/')
 api = Tracking()
@@ -352,14 +352,11 @@ class RailwayContext(AttrDict):
             i = known_models[i]
         if not re.fullmatch(r'([A-Z]{4})?[0-9]{7}', i):  # cars or containers
             return True
-        elif 'captcha' not in context:
-            api.query['check_code'] = solve_captcha(api.load_captcha())
-            context.captcha = True
         result = tracking_handler(i)
         reply = {
             '没有满足条件的查询结果！': '找不到 {} 呢。',
             '货车追踪失败，请稍后再试！': '噫，{}？不告诉你哦~',
-            '验证码错误': '咦，{} 怎么没查出来，等会儿再试试？',
+            '验证码输入错误！': '咦，{} 怎么没查出来，等会儿再试试？',
             None: '{} 没查出来，再试一次吧（',
             0: '找不到这个集装箱呢。',
         }.get(result, result).format(i)

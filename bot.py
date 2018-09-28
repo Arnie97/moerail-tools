@@ -579,7 +579,7 @@ def parse_trainnets(lines: Iterable[str]) -> Dict[str, Tuple[str, str]]:
     trainnets = {}
     for line in lines:
         url, _, intro = line.strip().partition(' ')
-        identifiers = match_identifiers(intro)
+        identifiers = [i for i in match_identifiers(intro) if not i.isdigit()]
         if identifiers:
             for extra, i in enumerate(identifiers):
                 if i not in trainnets:

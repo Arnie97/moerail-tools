@@ -69,24 +69,34 @@ class Tracking(API):
             print()
 
     def explain(self, info: AttrDict) -> str:
-        'Format the query results.'
+        'Convert the query result to a human-readable text message.'
+        # remove trailing whitespace and null values
+        for k, v in info.items():
+            info[k] = str(v).rstrip()
+            if info[k] in ['0', '-1']:
+                info[k] = ''
+
+        # rename some fields to fit into the template
         converters = {
             'fz': 'cdyStation',
             'dz': 'destStation',
             'pm': 'cdyName',
             'xh': 'carNo',
             'tyrName': 'conName',
+            'wbNbr': 'wbID',
         }
         for k, v in converters.items():
             info[v] = info[v] or info[k]
-        if not info.wbID or info.wbID == '-1':
-            info.wbID = info.wbNbr
+
         if info.xh:
             info.carKind = '集装箱'
             info.carLE = 'L' if info.cdyName else 'E'
         elif info.carType.startswith(info.carKind):
             info.carKind = '车辆'
-        if info.carLE == 'L':
+
+        if not info.cdyName:
+            status = ''
+        elif info.carLE == 'L':
             status = '负责运送{wbID[编号为 {} 的]}{cdyName}'
             if info.cdyName[-1].isdigit():
                 info.cdyName += '类货物'
@@ -94,8 +104,9 @@ class Tracking(API):
             status = '当前状态为{cdyName}{wbID[，编号为 {}]}'
             if info.cdyName.endswith('空'):
                 info.cdyName += '车'
-            elif not info.cdyName.strip():
-                info.cdyName = '空'
+        if info.get('trainId'):
+            info.train = ' %s 次列车' % info.trainId
+
         info.arrDep = {
             '': dict(A='到达', D='离开').get(info.arrDepId),
             '在站': '到达',
@@ -106,17 +117,12 @@ class Tracking(API):
         截至 {eventDate} 时为止，您查询的{conName[由{}托运的]}
         {carNo[ {} 号]}{carType[ {} 型]}{carKind}
         {cdyStation[已从{cdyAdm}{}站发出，]}
-        {destStation[前往{destAdm}{}站，]}%s。
-        该车%s目前已{arrDep}{eventProvince[位于{}{eventCity}的]}
+        {destStation[前往{destAdm}{}站，]}%s{cdyName[。该车]}
+        {train[现被编入{}]}{trainOrder[机后第 {} 位]}{train[，]}
+        目前已{arrDep}{eventProvince[位于{}{eventCity}的]}
         {eventAdm}{eventStation}站
         {dzlc[，距离终点站{destStation}站还有 {} km]}。
-        '''
-
-        explanation %= status, '''
-        现被编入{trainId[ {} 次列车]}{train[{}]}
-        机后第 {trainOrder} 位，
-        ''' if info.trainOrder else ''
-
+        ''' % status
         return self.format(strip_lines(explanation), **info)
 
 

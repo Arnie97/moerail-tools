@@ -427,18 +427,29 @@ class RailwayContext(AttrDict):
     def winsky_filter(context, i) -> bool:
         'Return the first matching item from the aircraft database.'
         reply = '''
-            {注册号} 的机型为 {机型}，{发动机型号[采用 {} 发动机，]}
-            {首次交付[于 {} 首次交付，]}{引进日期[{} 引入]}{运营机构[{}运营，]}
-            目前状态为{状态}。{备注[{}。]}
+            {注册号} 的机型为 {机型}，{串号[串号为 {}，]}
+            {发动机型号[采用 {} 发动机。该飞机]}
+            {隶属[隶属于{}，]}{首次交付[于{}首次交付，]}
+            {引进日期[于{}引入]}{运营机构[{}运营，]}
+            {状态[目前状态为{}。]}{备注[{}。]}
         '''
         i = context.identifiers[i]
         if not i.startswith('B-'):
             return True
         for aircraft in winsky_handler(i):
-            if aircraft.get('注册号') == i:
-                reply = api.format(reply.strip(), **aircraft)
-                bot.send(context, strip_lines(reply))
-                return
+            if aircraft['注册号'] != i:
+                continue
+            # convert the date to Chinese format
+            for key in ['首次交付', '引进日期']:
+                if '-' in aircraft[key]:
+                    fields = zip(aircraft[key].split('-'), '年月日')
+                    aircraft[key] = ''.join(chain.from_iterable(fields))
+            # remove possible duplicates
+            if aircraft['状态'] in aircraft['备注']:
+                aircraft.pop('状态')
+            reply = api.format(reply.strip(), **aircraft)
+            bot.send(context, strip_lines(reply))
+            return
         return True
 
 

@@ -73,7 +73,7 @@ class Tracking(API):
         # remove trailing whitespace and null values
         for k, v in info.items():
             info[k] = str(v).rstrip()
-            if info[k] in ['0', '-1']:
+            if info[k] in ['0', '-1', '发货人']:
                 info[k] = ''
 
         # rename some fields to fit into the template
@@ -82,11 +82,17 @@ class Tracking(API):
             'dz': 'destStation',
             'pm': 'cdyName',
             'xh': 'carNo',
-            'tyrName': 'conName',
+            'tyrName': 'shpName',
+            'conName': 'shpName',
             'wbNbr': 'wbID',
         }
         for k, v in converters.items():
             info[v] = info[v] or info[k]
+
+        if info.conName == info.shpName:
+            info.conName = ''
+        else:
+            info.conName = '，发往' + info.conName
 
         if info.xh:
             info.carKind = '集装箱'
@@ -114,7 +120,7 @@ class Tracking(API):
         }.get(info.xt) or '到达'
 
         explanation = '''
-        截至 {eventDate} 时为止，您查询的{conName[由{}托运的]}
+        截至 {eventDate} 时为止，您查询的{shpName[由{}托运{conName}的]}
         {carNo[ {} 号]}{carType[ {} 型]}{carKind}
         {cdyStation[已从{cdyAdm}{}站发出，]}
         {destStation[前往{destAdm}{}站，]}%s{cdyName[。该车]}

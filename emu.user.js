@@ -6,10 +6,10 @@
 // @license     MIT
 // @namespace   https://github.com/Arnie97
 // @homepageURL https://github.com/Arnie97/emu-tools
-// @match       https://kyfw.12306.cn/otn/leftTicket/init
-// @match       https://kyfw.12306.cn/otn/leftTicketPrice/init
-// @match       https://kyfw.12306.cn/otn/leftTicketPrice/initPublicPrice
-// @match       https://kyfw.12306.cn/otn/czxx/init
+// @match       https://kyfw.12306.cn/otn/leftTicket/init*
+// @match       https://kyfw.12306.cn/otn/leftTicketPrice/init*
+// @match       https://kyfw.12306.cn/otn/leftTicketPrice/initPublicPrice*
+// @match       https://kyfw.12306.cn/otn/czxx/init*
 // @icon        https://moerail.ml/favicon.ico
 // @connect     moerail.ml
 // @grant       none

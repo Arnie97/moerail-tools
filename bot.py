@@ -284,13 +284,7 @@ class RailwayContext(AttrDict):
 
     def model_filter(context, i: str) -> bool:
         'Return the introduction of railway cars.'
-        if i.isdigit() and len(i) == 6:
-            reply = '''
-                客车目前不能追踪呢，你可以
-                去 http://passearch.info/?type=number&keyword={0} 看看
-                有没有车迷记录 {0} 的配属状况。
-            '''.strip().format(i)
-        elif i in trainnets:
+        if i in trainnets:
             url, reply = trainnets[i]
             if ':' == url:
                 pass
@@ -388,6 +382,9 @@ class RailwayContext(AttrDict):
                 reply += strip_lines(trace)
             else:
                 reply += '我记不清了呢（'
+        elif i.isdigit() and len(i) == 6:
+            reply = '客车不能追踪呢。'
+            reply += '如果您要查询按货车办理的六位编号特种车辆，请在前面补零。'
         else:
             return True
         bot.send(context, reply)

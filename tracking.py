@@ -84,7 +84,7 @@ class Tracking(API):
             'xh': 'carNo',
             'tyrName': 'shpName',
             'conName': 'shpName',
-            'wbNbr': 'wbID',
+            'wbID': 'wbNbr',
         }
         for k, v in converters.items():
             info[v] = info[v] or info[k]
@@ -103,11 +103,11 @@ class Tracking(API):
         if not info.cdyName:
             status = ''
         elif info.carLE == 'L':
-            status = '负责运送{wbID[编号为 {} 的]}{cdyName}'
-            if info.cdyName[-1].isdigit():
-                info.cdyName += '类货物'
+            status = '负责运送{wbNbr[单号为 {} 的]}{cdyName}'
+            if info.cdyName[-1:].isdigit():
+                info.cdyName += '型集装箱'
         else:
-            status = '当前状态为{cdyName}{wbID[，编号为 {}]}'
+            status = '当前状态为{cdyName}{wbNbr[，运单号为 {}]}'
             if info.cdyName.endswith('空'):
                 info.cdyName += '车'
         if info.get('trainId'):

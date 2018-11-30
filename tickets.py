@@ -10,29 +10,19 @@ from getpass import getpass
 from typing import BinaryIO, Iterable, Tuple
 from urllib.parse import unquote
 
-from util import argv, module_dir, open, shell, AttrDict
+from util import module_dir, open, shell, strip_lines, AttrDict
 today = datetime.date.today().isoformat()
 
 
 class API:
-    'https://kyfw.12306.cn/'
+    'https://example.com/'
 
-    def __init__(self, params='tickets.json', persist='cookies.json'):
+    def __init__(self, params=None, headers=None):
         'Initialize the session.'
-        # load the headers
         self.session = requests.Session()
-        with open(module_dir(params)) as f:
-            self.params = json.load(f)
-        self.session.headers = self.params.pop('headers')
-
-        # load the cookies
-        self.persist = persist and module_dir(persist)
-        if not persist or not os.path.exists(self.persist):
-            return
-        with open(self.persist) as f:
-            cj = requests.utils.cookiejar_from_dict(json.load(f))
-            self.session.cookies = cj
-        self.init_query_path()
+        self.params = params or {}
+        if headers:
+            self.session.headers = headers
 
     def fetch(self, path, params=None, method='POST', json=True, **kwargs):
         'Initiate an API request.'
@@ -44,6 +34,25 @@ class API:
         kwargs[query] = params
         response = self.session.request(method, url, **kwargs)
         return AttrDict(response.json()) if json else response
+
+
+class Ticket(API):
+    'https://kyfw.12306.cn/'
+
+    def __init__(self, persist_cookies='cookies.json'):
+        'Load the headers and cookies from external files.'
+        with open(module_dir('tickets.json')) as f:
+            params = json.load(f)
+        super().__init__(params, params.pop('headers'))
+
+        self.persist_cookies = persist_cookies
+        if persist_cookies:
+            if os.path.exists(persist_cookies):
+                with open(persist_cookies) as f:
+                    cj = requests.utils.cookiejar_from_dict(json.load(f))
+                self.session.cookies = cj
+
+        self.init_query_path()
 
     def init_query_path(self):
         'Get the API endpoint, which varies between "queryA" and "queryZ".'
@@ -64,13 +73,16 @@ class API:
         )
         return [train.split('|') for train in response.data['result']]
 
-    def show_captcha(self):
-        'Show the CAPTCHA image.'
+    def load_captcha(self) -> io.BytesIO:
+        'Fetch the CAPTCHA image.'
         response = self.fetch(
             'passport/captcha/captcha-image',
             method='GET', params='captcha', json=False,
         )
-        show_image(io.BytesIO(response.content))
+        return io.BytesIO(response.content)
+
+    def input_captcha(self) -> str:
+        'Convert the area IDs to coordinates.'
         layout = '''
             -----------------
             | 0 | 1 | 2 | 3 |
@@ -78,15 +90,11 @@ class API:
             | 4 | 5 | 6 | 7 |
             -----------------
         '''
-        for line in layout.split('\n'):
-            print(line.strip())
-
-    def input_captcha(self) -> str:
-        'Convert the area IDs to coordinates.'
         coordinates = '''
             30,41 110,44 180,43 260,42
             35,95 105,98 185,97 255,96
         '''.split()
+        print(strip_lines(layout, '\n'))
         answers = input('Please enter the area IDs, for example "604": ')
         return ','.join(coordinates[int(i)] for i in answers if i.isdigit())
 
@@ -122,11 +130,10 @@ class API:
 
     def save_cookies(self):
         'Save the cookies in a JSON file.'
-        if not self.persist:
-            return
-        with open(self.persist, 'w') as f:
+        if self.persist_cookies:
             cj = requests.utils.dict_from_cookiejar(self.session.cookies)
-            json.dump(cj, f)
+            with open(self.persist_cookies, 'w') as f:
+                json.dump(cj, f)
 
     def is_logged_in(self) -> bool:
         'Check whether the user is logged in.'
@@ -168,12 +175,11 @@ class API:
         return response.data['normal_passengers']
 
 
-def show_image(file: BinaryIO):
+def show_image(file: BinaryIO, img_path='captcha.jpg'):
     'Save the image to a file if Pillow is not installed.'
     try:
         from PIL import Image
     except ImportError:
-        img_path = argv(2) or 'captcha.jpg'
         with open(img_path, 'wb') as f:
             f.write(file.read())
         print('Open the image "%s" to solve the CAPTCHA.' % img_path)
@@ -183,11 +189,11 @@ def show_image(file: BinaryIO):
 
 def main():
     'The entrypoint.'
-    x = API()
+    x = Ticket()
     if x.is_logged_in():
         print('Already logged in.')
     else:
-        x.show_captcha()
+        show_image(x.load_captcha())
         coordinates = x.input_captcha()
         x.check_captcha(coordinates)
         x.login(username=input('Login: '), password=getpass())

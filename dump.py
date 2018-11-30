@@ -6,12 +6,12 @@ import kyfw
 import hyfw
 import tmis
 from stations import path, dump_stations
-from util import shell, progress, open, AttrDict
+from util import shell, progress, open
 
 
 def combine_stations() -> Iterable[List[str]]:
     'Combine the two railway station datasets by telecode.'
-    stations = AttrDict()
+    stations = {}
     names = {}
     stations_95306 = hyfw.dfs()
     stations_12306 = kyfw.stations()

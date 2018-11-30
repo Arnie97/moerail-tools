@@ -4,14 +4,13 @@ import sys
 import os.path
 import string
 import builtins
-from collections import OrderedDict
 from typing import Callable
 
 
-class AttrDict(OrderedDict):
+class AttrDict(dict):
     'Make the keys accessible via attributes.'
-    __getattr__ = OrderedDict.__getitem__
-    __setattr__ = OrderedDict.__setitem__
+    __getattr__ = dict.__getitem__
+    __setattr__ = dict.__setitem__
 
 
 class FilterFormatter(string.Formatter):
@@ -33,6 +32,11 @@ class FilterFormatter(string.Formatter):
         return obj, first
 
 
+def strip_lines(text: str, sep='') -> str:
+    'Remove leading and trailing whitespace from each line in the text.'
+    return sep.join(line.strip() for line in text.split('\n'))
+
+
 def progress(dot='.', file=sys.stdout):
     'Print a progress bar.'
     file.write(dot)
@@ -43,16 +47,10 @@ def repl(handler: Callable, prompt='> '):
     'Prompt for user input.'
     try:
         import readline
-        from stations import path, load_stations
-        with open(path) as f:
-            suggestions.list = [s[1] for s in load_stations(f.read())]
-
-    except (ImportError, FileNotFoundError):
+    except ImportError:
         pass
-
     else:
-        readline.parse_and_bind('tab: complete')
-        readline.set_completer(suggestions)
+        readline.parse_and_bind('set disable-completion')
 
     while True:
         try:
@@ -60,16 +58,6 @@ def repl(handler: Callable, prompt='> '):
         except (KeyboardInterrupt, EOFError):
             print()
             break
-
-
-def suggestions(text: str, state: int):
-    'Generate completion suggestions.'
-    text = text.strip()
-    if not text:
-        return
-    p = [i for i in suggestions.list if i.startswith(text)]
-    if state < len(p):
-        return p[state]
 
 
 def shell(ns=None, banner=None):

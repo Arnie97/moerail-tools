@@ -14,13 +14,12 @@ def tmis(name='', bureau=0) -> OrderedDict:
     params.update(q=name, ljdm=format(bureau, '02'))
     while True:
         try:
-            response = requests.post(url, params, timeout=1)
-        except requests.exceptions.Timeout:
+            response = requests.post(url, params, timeout=1).json()
+        except (requests.exceptions.Timeout, json.JSONDecodeError):
             progress('X')
         else:
             break
-    list_of_dicts = json.loads(response.text)
-    return OrderedDict((d['HZZM'], d['TMISM']) for d in list_of_dicts)
+    return OrderedDict((d['HZZM'], d['TMISM']) for d in response)
 
 
 def dfs(name='') -> OrderedDict:

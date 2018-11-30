@@ -2,10 +2,11 @@
 
 import io
 import re
-import requests
 
-from util import module_dir, repl, AttrDict, FilterFormatter
+from util import module_dir, repl, strip_lines, AttrDict, FilterFormatter
 from tickets import show_image, API
+
+CAR_OR_CONTAINER_PATTERN = r'([A-Z]{4})?[0-9]{7}'
 
 
 class Tracking(API):
@@ -13,51 +14,49 @@ class Tracking(API):
 
     def __init__(self):
         'Initialize the session.'
+        super().__init__()
         self.format = FilterFormatter().format
-        self.session = requests.Session()
-        self.params = {}
         response = self.fetch('hwzzPage.action', method='GET', json=False)
         pattern = '<input id="maths" .+? value="(.+?)" />'
-        self.query = {
+        self.params[None] = {
             'mathsid': re.search(pattern, response.text).group(1),
             'hwzz.yzm': '63FD155B6A364CB4BC1680C1F74B4B37',
         }
 
     def load_captcha(self) -> io.BytesIO:
         'Fetch the CAPTCHA image.'
-        params = dict(math=0, update=self.query['mathsid'])
+        params = dict(math=0, update=self.params[None]['mathsid'])
         response = self.fetch(
             'security/jcaptcha.jpg',
             method='GET', params=params, json=False,
         )
         return io.BytesIO(response.content)
 
-    def check_captcha(self, answer: str, test_case='1234567'):
-        'Check whether the CAPTCHA answers are correct.'
-        self.query['check_code'] = answer
-        self.track_car(test_case)
+    def fill_captcha(self, answer: str):
+        'Save the recognized CAPTCHA text.'
+        self.params[None]['check_code'] = answer
 
     def track(self, **kwargs) -> AttrDict:
         'Send the tracking request and parse the response message.'
         # insert the namespace prefix for each key
         data = {'hwzz.' + k: v for k, v in kwargs.items()}
-        data.update(self.query)
-        response = self.fetch('hwzz_uouii.action', data)
+        response = self.fetch('hwzz_uouii.action', data=data)
         assert response.success, response.get('message', response.get('msg'))
         return AttrDict(response.object[0])
 
-    def track_car(self, car_no: str) -> AttrDict:
+    def track_car(self, car_no: str='0000000') -> AttrDict:
         'Track your rail shipment by car number.'
-        assert len(car_no) == 7, 'Illegal car number'
         return self.track(type=1, carNo=car_no, hph='')
 
     def track_container(self, container_no: str) -> AttrDict:
         'Track your rail shipment by container number.'
-        assert len(container_no) == 11, 'Illegal container number'
         return self.track(type=5, xz=container_no[:4], xh=container_no[4:])
 
     def repl_handler(self, line: str):
         'Catch the exceptions and print the error messages.'
+        if not re.fullmatch(CAR_OR_CONTAINER_PATTERN, line):
+            print('Invalid query:', line)
+            return
         method = self.track_car if line.isdigit() else self.track_container
         try:
             info = method(line)
@@ -132,11 +131,6 @@ class Tracking(API):
         return self.format(strip_lines(explanation), **info)
 
 
-def strip_lines(text: str, sep='') -> str:
-    'Remove leading and trailing whitespace from each line in the text.'
-    return sep.join(line.strip() for line in text.split('\n'))
-
-
 def solve_captcha(captcha_image: io.BytesIO) -> str:
     'Solve the CAPTCHA image.'
     from captcha.captcha import image_filter, solve
@@ -151,8 +145,8 @@ def auth():
     x = Tracking()
     captcha_image = x.load_captcha()
     try:
-        answer = solve_captcha(captcha_image)
-        x.check_captcha(answer)
+        x.fill_captcha(solve_captcha(captcha_image))
+        x.track_car()
     except (ImportError, AssertionError) as e:
         print(e)
         show_image(captcha_image)
@@ -161,7 +155,8 @@ def auth():
 
     while True:
         try:
-            x.check_captcha(input('# ').strip())
+            x.fill_captcha(input('# ').strip())
+            x.track_car()
         except AssertionError as e:
             print(e)
         else:

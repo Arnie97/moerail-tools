@@ -10,6 +10,7 @@ import re
 import requests
 import sys
 import time
+from collections import OrderedDict
 from concurrent.futures import ThreadPoolExecutor
 from contextlib import redirect_stdout, redirect_stderr
 from itertools import chain, islice
@@ -18,9 +19,9 @@ from subprocess import run, PIPE
 from typing import Dict, Iterable, Tuple
 
 from cqhttp import CQHttp
-from util import argv, open, AttrDict
+from util import argv, open, strip_lines, AttrDict
 from trains import load_trains, parse_trains, sort_trains
-from tracking import solve_captcha, strip_lines, Tracking
+from tracking import solve_captcha, Tracking, CAR_OR_CONTAINER_PATTERN
 
 bot = CQHttp('http://localhost:5700/')
 api = Tracking()
@@ -163,10 +164,10 @@ def parse_shell(context) -> str:
         return dict(reply=context.raw_message, auto_escape=True)
 
 
-def match_identifiers(text: str, remove='-') -> AttrDict:
+def match_identifiers(text: str, remove='-') -> OrderedDict:
     'Return all non-overlapping identifiers in the text, with hyphens removed.'
     pattern = r'(?a)(?<!\w)([A-Z][-\w]+|\d{4,7}|\w+[A-Z])(?!\w)'
-    return AttrDict(
+    return OrderedDict(
         (i.replace(remove, ''), i)
         for i in re.findall(pattern, text)
     )
@@ -180,7 +181,7 @@ class RailwayContext(AttrDict):
             return super().__init__()
         self.update(
             bot.get_group_member_info(**context)
-            if context.message_type == 'group'
+            if context.message_type == 'group' and context.user_id != 1000000
             else dict(title='')
         )
         self.update(context)
@@ -197,6 +198,7 @@ class RailwayContext(AttrDict):
             )) and
             context.greeting_filter() and
             context.abuse_filter() and
+            context.speed_filter() and
             [
                 context.model_filter(i) and
                 context.train_filter(i) and
@@ -246,40 +248,46 @@ class RailwayContext(AttrDict):
             bot.send(context, reply.format(context.title))
 
     def abuse_filter(context) -> bool:
-        'Throttle the number of messages and remove the stop words.'
+        'Ignore the stop words and reject the bad words.'
         if re.search(limit.stop_words, context.message):
             return
+        for pattern in [limit.self, r'^\W+']:
+            context.message = re.sub(pattern, '', context.message)
+
+        if context.user_id in limit.administrators:
+            return True
+        elif (
+            len(context.identifiers) > limit.max_queries or
+            re.search(limit.bad_words, context.message) or
+            any(re.search(limit.bad_words, i) for i in context.identifiers)
+        ):
+            reply = '哼，不许捣乱！'
+        elif context.user_id in limit.black_list:
+            reply = '哼，坏蛋，不告诉你！'
         elif not limit.railway_groups.get(context.group_id, True):
-            if context.user_id not in limit.administrators:
-                bot.send(context, '下班了，明天见~')
-                return
+            reply = '下班了，明天见~'
+        else:
+            return True
+        bot.send(context, reply)
 
-        roger = False
-        original, context.identifiers = context.identifiers, AttrDict()
-        for count, (k, v) in enumerate(original.items()):
-            if context.user_id in limit.administrators:
-                pass
-            elif re.search(limit.bad_words, k) or count >= limit.max_queries:
-                bot.send(context, '哼，不许捣乱！')
-                return
-            context.identifiers[k] = v
-            if k.isdigit() and len(k) == 7 or count > 1:
-                roger = True
-
-        if roger:
-            if context.user_id in limit.black_list:
-                bot.send(context, '哼，坏蛋，不告诉你！')
-                return
-            elif context.user_id not in limit.administrators and limit():
-                bot.send(context, '哼，不理你了!')
-                return
-            elif context.title:
-                reply = '好的，%s' % context.title
-            else:
-                reply = '好的，%s/%s，收到/嗯，%s/%s，明白/%s，知道了'
-                reply = random.choice(reply.split('/'))
-                reply %= '、'.join(context.identifiers)
-            bot.send(context, reply)
+    def speed_filter(context) -> bool:
+        'Limit the time-consuming requests.'
+        throttle_required = any(
+            count or re.fullmatch(CAR_OR_CONTAINER_PATTERN, i)
+            for count, i in enumerate(context.identifiers)
+        )
+        if not throttle_required:
+            return True
+        elif context.user_id not in limit.administrators and limit():
+            bot.send(context, '哼，不理你了！')
+            return
+        elif context.title:
+            reply = '好的，%s' % context.title
+        else:
+            reply = '好的，%s/%s，收到/嗯，%s/%s，明白/%s，知道了'
+            reply = random.choice(reply.split('/'))
+            reply %= ' '.join(context.identifiers)
+        bot.send(context, reply)
         return True
 
     def model_filter(context, i: str) -> bool:
@@ -344,12 +352,16 @@ class RailwayContext(AttrDict):
             '''.strip().format(i, known_models[i])
             bot.send(context, reply)
             i = known_models[i]
-        if not re.fullmatch(r'([A-Z]{4})?[0-9]{7}', i):  # cars or containers
+        if not re.fullmatch(CAR_OR_CONTAINER_PATTERN, i):
             return True
-        elif 'captcha' not in context:
-            api.query['check_code'] = solve_captcha(api.load_captcha())
-            context.captcha = True
-        result = tracking_handler(i)
+        try:
+            if 'captcha_solved' not in context:
+                api.fill_captcha(solve_captcha(api.load_captcha()))
+        except:
+            result = None
+        else:
+            context.captcha_solved = True
+            result = tracking_handler(i)
         reply = {
             '没有满足条件的查询结果！': '找不到 {} 呢。',
             '货车追踪失败，请稍后再试！': '噫，{}？不告诉你哦~',
@@ -391,12 +403,7 @@ class RailwayContext(AttrDict):
 
     def wiki_filter(context, i=None) -> bool:
         'Return the first article found in a bunch of wiki sites.'
-        if i:
-            titles = context.identifiers[i]
-        else:
-            titles = context.message
-            for stop_words in [limit.stop_words, limit.self, r'^\W+']:
-                titles = re.sub(stop_words, '', titles)
+        titles = context.identifiers[i] if i else context.message
         if not titles:
             return True
 
@@ -669,9 +676,7 @@ def initialize(config_file: str):
 if __name__ == '__main__':
     initialize(argv(1) or 'bot_config.json')
     try:
-        bot.run(host='localhost', port=7700)
-    except ValueError:  # closed stderr
-        raise
+        bot.run()
     finally:
         print('Committing changes...')
         with open(limit.serial_json, 'w') as f:

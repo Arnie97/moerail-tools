@@ -2,11 +2,11 @@
 // @name        动车组交路查询
 // @description 在 12306 订票页面上显示动车组型号与交路
 // @author      Arnie97
-// @version     2018.05.13
+// @version     2018.11.11
 // @license     MIT
 // @namespace   https://github.com/Arnie97
 // @homepageURL https://github.com/Arnie97/emu-tools
-// @match       https://kyfw.12306.cn/otn/leftTicket/init
+// @match       https://kyfw.12306.cn/otn/leftTicket/init*
 // @match       https://kyfw.12306.cn/otn/leftTicketPrice/init
 // @match       https://kyfw.12306.cn/otn/leftTicketPrice/initPublicPrice
 // @match       https://kyfw.12306.cn/otn/czxx/init

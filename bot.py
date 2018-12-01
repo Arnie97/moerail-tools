@@ -152,16 +152,30 @@ def parse_shell(context) -> str:
         try:
             limit.railway_groups[context.group_id] ^= True  # toggle
         except KeyError:
-            uptime = datetime.timedelta(seconds=time.monotonic())
-            uptime_hms = time.strftime('%H:%M:%S', time.gmtime(uptime.seconds))
-            reply = '{0.node} (up {1} days, {2})\n{0.system} {0.release}'
-            return reply.format(platform.uname(), uptime.days, uptime_hms)
+            return system_info()
         else:
             enabled = limit.railway_groups[context.group_id]
             return '我回来啦（' if enabled else '下班喽~'
 
     elif context.message_type == 'private':
         return dict(reply=context.raw_message, auto_escape=True)
+
+
+def system_info() -> str:
+    'Provide a summary of runtime environment.'
+    reply = '''
+        {0.node} (up {1} days, {2})
+        {0.system} {0.release}
+        {3} {4[0]}
+        CoolQ HTTP API v{5[plugin_version]}
+    '''
+    uptime = datetime.timedelta(seconds=time.monotonic())
+    uptime_hms = time.strftime('%H:%M:%S', time.gmtime(uptime.seconds))
+    return strip_lines(reply, '\n').strip().format(
+        platform.uname(), uptime.days, uptime_hms,
+        platform.python_implementation(), platform.python_build(),
+        bot.get_version_info(),
+    )
 
 
 def match_identifiers(text: str, remove='-') -> OrderedDict:

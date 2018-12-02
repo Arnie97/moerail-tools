@@ -8,14 +8,15 @@ import platform
 import random
 import re
 import requests
+import subprocess
 import sys
 import time
+import traceback
 from collections import OrderedDict
 from concurrent.futures import ThreadPoolExecutor
-from contextlib import redirect_stdout, redirect_stderr
+from contextlib import redirect_stdout
 from itertools import chain, islice
 from string import ascii_uppercase
-from subprocess import run, PIPE
 from typing import Dict, Iterable, Tuple
 
 from cqhttp import CQHttp
@@ -139,14 +140,14 @@ def parse_loopback(context) -> bool:
 def parse_shell(context) -> str:
     'Provide Python and Bash shells.'
     if context.message.startswith('$'):
-        proc = run(context.message[1:], shell=True, stdout=PIPE)
+        command = context.message[1:].strip()
+        proc = subprocess.run(command, shell=True, capture_output=True)
         return proc.stdout.decode(sys.getfilesystemencoding()).strip()
 
     elif context.message.startswith('>>>'):
-        result = io.StringIO()
-        with redirect_stdout(result), redirect_stderr(result):
-            print('\n-->', eval(context.message[3:]))
-        return result.getvalue().strip()
+        command = context.message[3:].strip()
+        result = python_interpreter(command, locals=dict(context=context))
+        return '--> ' + result
 
     elif context.message.startswith('//'):
         try:
@@ -159,6 +160,20 @@ def parse_shell(context) -> str:
 
     elif context.message_type == 'private':
         return dict(reply=context.raw_message, auto_escape=True)
+
+
+def python_interpreter(source, globals=None, locals=None) -> str:
+    'Run the Python code snippet and collect all the output as a string.'
+    result = io.StringIO()
+    try:
+        code_obj = compile(source, '<interpreter>', 'single')
+        with redirect_stdout(result):
+            exec(code_obj, globals, locals)
+    except:
+        exc_type, exc_value, tb = sys.exc_info()
+        result.write(traceback.format_exception_only(exc_type, exc_value)[-1])
+        traceback.print_exc()
+    return result.getvalue().strip()
 
 
 def system_info() -> str:

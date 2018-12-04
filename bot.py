@@ -205,7 +205,7 @@ def match_identifiers(text: str, remove='-') -> OrderedDict:
 class RailwayContext(AttrDict):
 
     def __init__(self, context=None):
-        'Search the keywords in the received message.'
+        'Extract identifiers from the message.'
         if context is None:
             return super().__init__()
         self.update(
@@ -245,7 +245,8 @@ class RailwayContext(AttrDict):
             for unknown, i in zip(unknown_items, context.identifiers)
             if unknown and
             context.wiki_filter(i) and
-            context.wildcard_filter(i)
+            context.wildcard_model_filter(i) and
+            context.wildcard_train_filter(i)
         ]
         if any(unknown_items):
             reply = '%s 是什么哦，没见过呢'
@@ -320,61 +321,45 @@ class RailwayContext(AttrDict):
         return True
 
     def model_filter(context, i: str) -> bool:
-        'Return the introduction of railway cars.'
-        if i in trainnets:
-            url, reply = trainnets[i]
-            if ':' == url:
-                pass
-            elif ':' in url:
-                reply += '详见 %s。' % url
-            else:
-                reply += '详见 https://trainnets.com/archives/%s。' % url
-            if i in known_models:
-                serial = known_models[i]
-                reply += '如果你想追踪它的话，可以用 %s 这个车号。' % serial
-        elif i in emu_models:
-            reply, foreword = context.get_train_route(i)
-            reply += '''
-                {2}使用的动车组型号是{1}
-                交路信息详见 https://moerail.ml/#{0}。
-            '''.strip().format(i, emu_models[i], foreword)
-        elif i in cr_express:
-            reply = '''
-                {2} 次{1}班列，由{5}站始发，终到{6}站
-                {10[，经由{}]}。列车{12[速度标尺为{}，]}
-                {4[装车站为{}，]}{7[卸车站为{}；]}编组为{9}。
-                {13[{}。]}
-            '''
-            reply = api.format(reply.strip(), *cr_express[i])
-        else:
+        'Introduce the rolling stock.'
+        if i not in trainnets:
             return True
+        url, reply = trainnets[i]
+        if ':' == url:
+            pass
+        elif ':' in url:
+            reply += '详见 %s。' % url
+        else:
+            reply += '详见 https://trainnets.com/archives/%s。' % url
+        if i in known_models:
+            serial = known_models[i]
+            reply += '如果你想追踪它的话，可以用 %s 这个车号。' % serial
         bot.send(context, strip_lines(reply))
+        return context.train_filter(i) and False
 
     def train_filter(context, i: str) -> bool:
-        'Infer the models of other multiple units.'
-        reply, foreword = context.get_train_route(i)
-        for model, pattern in emu_patterns.items():
-            if re.match(pattern, i):
-                reply += '''
-                    {2}使用的动车组型号是{1}。
-                '''.strip().format(i, model, foreword)
-                break
+        'Gather and integrate train information from multiple sources.'
+        i = context.identifiers[i]
+        model = get_train_model(i)
+        freight_train = normalize_freight_train_number(i)
+        category_description = get_train_category(freight_train or i).strip()
+        if i in trains:
+            reply = category_description + '，从%s站始发，终到%s站。'
+            reply %= trains[trains[i]]
+        elif freight_train in cr_express:
+            reply = get_cr_express(freight_train)
+        elif freight_train in known_traces or model:
+            reply = '嗯，{}？'.format(category_description % i)
         else:
-            if i not in trains:
-                return True
+            return True
+        if model:
+            reply += model
+        if freight_train in known_traces:
+            reply += get_train_trace(freight_train)
         bot.send(context, reply)
 
-    @staticmethod
-    def get_train_route(i) -> Tuple[str, str]:
-        'Provide information about passenger train routes.'
-        description = get_train_description(i).strip()
-        if i not in trains:
-            return description % i, ''
-        reply = description + '，从%s站始发，终到%s站。'
-        return reply % trains[trains[i]], '列车'
-
     def tracking_filter(context, i)-> bool:
-        'Provide railway shipment tracking service.'
+        'Solve the CAPTCHA to track freight cars or containers.'
         if i in known_models:
             reply = '''
                 {} 的车号应该是 {}，我帮你查一下。
@@ -400,29 +385,27 @@ class RailwayContext(AttrDict):
         }.get(result, result).format(i)
         bot.send(context, reply)
 
-    def wildcard_filter(context, i: str) -> bool:
+    def wildcard_model_filter(context, i: str) -> bool:
         'Match incomplete model names.'
         prefix_matches = sorted(
             model for model in set(chain(known_models, trainnets))
             if (i in model or model in i) and len(model) > 1
         )
-        description = get_train_description(i).strip()
+        if not prefix_matches:
+            return True
+        reply = '''
+            {0}… 你指的是 {1} 之类的吗？
+        '''.strip().format(i, '、'.join(prefix_matches))
+        bot.send(context, reply)
+
+    def wildcard_train_filter(context, i: str) -> bool:
+        'Return the category of a train number as fallback.'
         i = context.identifiers[i]
-        if prefix_matches:
-            reply = '''
-                {0}… 你指的是 {1} 之类的吗？
-            '''.strip().format(i, '、'.join(prefix_matches))
-        elif len(description) > 6:
-            reply = '嗯，{}？'.format(description % i)
-            train_number = re.sub(r'\D', '', i)
-            if train_number in known_traces:
-                trace = '''
-                    我在{eventAdm}的{eventStation}站见过呢，
-                    机后第 {trainOrder} 位拉着编号 {carNo} 的 {carType}。
-                '''.strip().format_map(known_traces[train_number])
-                reply += strip_lines(trace)
-            else:
-                reply += '我记不清了呢（'
+        freight_train = normalize_freight_train_number(i)
+        category_description = get_train_category(freight_train or i).strip()
+        if len(category_description) > 6:  # if any categories found
+            category_description %= i
+            reply = '嗯，%s？我记不清了呢（' % category_description
         elif i.isdigit() and len(i) == 6:
             reply = '客车不能追踪呢。'
             reply += '如果您要查询按货车办理的六位编号特种车辆，请在前面补零。'
@@ -514,7 +497,7 @@ def winsky_handler(registration: str) -> Iterable[AttrDict]:
 
 
 def tracking_handler(number: str) -> str:
-    'Response railway shipment queries.'
+    'Track rail freight operations, and save the results for later use.'
     method = api.track_car if number.isdigit() else api.track_container
     try:
         info = method(number)
@@ -523,15 +506,12 @@ def tracking_handler(number: str) -> str:
     except json.decoder.JSONDecodeError as e:
         print(e.doc)
     else:
-        if info.carType:
-            known_models[info.carType] = info.carNo
-        if not info.trainId:
-            pass
-        elif not info.trainId.isdigit() or int(info.trainId) > 10000:
-            if info.trainOrder and info.eventAdm:
-                known_traces[re.sub(r'\D', '', info.trainId)] = info.copy()
-            info.train = get_train_description(info.trainId) % info.trainId
-            info.pop('trainId')
+        known_models[info.carType.strip()] = info.carNo
+        freight_train = normalize_freight_train_number(info.trainId)
+        known_traces[freight_train or info.trainId.strip()] = info.copy()
+        if freight_train:
+            category_description = get_train_category(freight_train)
+            info.train = category_description % info.pop('trainId').strip()
         return api.explain(info)
 
 
@@ -589,8 +569,15 @@ class TrainRange:
             return '', int(train)
 
 
-def get_train_description(train: str) -> str:
-    'Provide information about the train number itself.'
+def normalize_freight_train_number(train: str) -> str:
+    'Try to remove prefixes and suffixes to comprehend the train number.'
+    match = re.search(r'(?<!\d)[1-9]\d{4,}|X\d{3,4}(?!\d)', train)
+    if match:
+        return match.group(0)
+
+
+def get_train_category(train: str) -> str:
+    'Infer the category of a train number from its range.'
     results = [' %s 次']
     for tr in train_ranges:
         if train not in tr:
@@ -600,16 +587,46 @@ def get_train_description(train: str) -> str:
         else:
             results.append(tr.category)
     if len(results) == 1:
-        if not train.isdigit():
-            train = re.sub(r'\D', '', train)
-            if train and int(train) > 10000:
-                return get_train_description(train)
         results.append('列车')
     return ''.join(results)
 
 
+def get_cr_express(train: str) -> str:
+    'Return the introduction to CR Express freight trains.'
+    reply = '''
+        {2} 次{1}班列，由{5}站始发，终到{6}站
+        {10[，经由{}]}。列车{12[速度标尺为{}，]}
+        {4[装车站为{}，]}{7[卸车站为{}；]}编组为{9}。
+        {13[{}。]}
+    '''
+    return api.format(strip_lines(reply), *cr_express[train])
+
+
+def get_train_model(train: str) -> str:
+    'Return the rolling stock model used for a train.'
+    if train in emu_models:
+        reply = '''
+            列车使用的动车组型号是{}
+            交路信息详见 https://moerail.ml/#{}。
+        '''
+        return strip_lines(reply).format(emu_models[train], train)
+    for model, pattern in emu_patterns.items():
+        if re.match(pattern, train):
+            reply = '列车使用的动车组型号是{}。'
+            return reply.format(model)
+
+
+def get_train_trace(train: str) -> str:
+    'Return the last known location of a train.'
+    reply = '''
+        我在{eventAdm}的{eventStation}站见过呢，
+        机后第 {trainOrder} 位拉着编号 {carNo} 的 {carType}。
+    '''
+    return api.format(strip_lines(reply), **known_traces[train])
+
+
 def parse_train_ranges(lines: Iterable[str]) -> Iterable[TrainRange]:
-    'Parse the train number ranges to determine train categories.'
+    'Parse the range rules of train number categories.'
     for line in lines:
         category, *range_pairs = line.strip().split()
         for pair in range_pairs:

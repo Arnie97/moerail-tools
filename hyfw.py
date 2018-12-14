@@ -10,8 +10,7 @@ from util import repl, progress
 
 def stations(pinyin: str) -> List[Dict[str, str]]:
     'Get all the stations from 95306.'
-    # http://www.12306.cn/mormhweb/hyfw/hyckcx/
-    url = 'http://dynamic.12306.cn/yjcx/doPickJZM'
+    url = 'https://www.12306.cn/yjcx/doPickJZM'
     params = dict(param=pinyin, type=1, czlx=0)
     response = requests.post(url, params)
     return json.loads(response.text)

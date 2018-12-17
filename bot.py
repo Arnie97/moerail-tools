@@ -3,6 +3,7 @@
 import datetime
 import io
 import json
+import locale
 import mwclient
 import platform
 import random
@@ -45,96 +46,75 @@ def unescape(text: str) -> str:
 
 
 @bot.on_notice()
-def new_notice(context, reply=None):
+def new_notice(context):
     'Detect file uploads and new group members.'
     context = AttrDict(context)
-    if context.group_id not in limit.railway_groups:
-        return
-    elif context.notice_type == 'group_upload':
-        if context.file['name'] == 'base.apk':
-            reply = '怎么又双叒叕是 base.apk [CQ:face,id=39]'
+    if (
+        context.notice_type == 'group_upload' and
+        context.file['name'] == 'base.apk'
+    ):
+        reply = '怎么又双叒叕是 base.apk [CQ:face,id=39]'
     elif context.notice_type == 'group_increase':
         reply = '群地位-1'
-    if reply:
-        context.message_type = 'group'
-        bot.send(context, reply)
+    else:
+        return
+    context.message_type = 'group'
+    bot.send(context, reply)
 
 
 @bot.on_request()
-def new_friend(context):
+def new_request(context):
     'Accepts friend requests from administrators.'
     if context['user_id'] in limit.administrators:
         return {'approve': True}
-    print(context)
 
 
 @bot.on_message()
-def new_msg_wrapper(context):
+def new_message(context):
     'Wraps the message event.'
     context = AttrDict(context)
-    context.notified = '[CQ:at,qq=%d]' % context.self_id in context.message
-    context.raw_message = context.message
-    context.message = unescape(context.message).strip()
-    # print(dict(context))
-
-    value = new_msg(context)
-    if value is None:
-        return
-    elif isinstance(value, dict):
-        return value
-    else:
-        return dict(reply=value, at_sender=False)
-
-
-def new_msg(context):
-    'The message event handler.'
+    context.sender = AttrDict(context.sender)
+    context.message = unescape(context.raw_message).strip()
     if context.message_type == 'private' and not parse_loopback(context):
         return
-    if context.user_id in limit.administrators:
-        return parse_shell(context) or RailwayContext(context)()
-    elif context.get('group_id') in limit.railway_groups:
-        return RailwayContext(context)()
+    elif context.sender.user_id in limit.administrators:
+        reply = parse_shell(context)
+        if reply is not None:
+            return dict(reply=reply, at_sender=False)
+        elif context.message_type == 'private':
+            return dict(reply=context.raw_message, auto_escape=True)
+    GroupMessageHandler(context)()
 
 
 def parse_loopback(context) -> bool:
-    '''语法：@群名 要发送的消息
-
-    可以将群名的任何一部分作为群名缩写。
-    缩写长度不限，只要不与机器人已加入的其他群的名称相混淆即可。
-    '''
+    'Send group messages according to manual commands.'
     if not context.raw_message.startswith('@'):
         return True
-    elif context.user_id in limit.black_list:
-        bot.send(context, '哼，坏蛋，不理你了！')
-        return
-
     factors = context.raw_message[1:].partition(' ')
-    if not all(factors):
-        reply = parse_loopback.__doc__.strip()
-        bot.send(context, strip_lines(reply, '\n'))
-        return
-
     group_key, delimit, text = factors
-    matches = [
+    matches = all(factors) and [
         group for group in bot.get_group_list()
         if group_key in group['group_name']
     ]
-    if len(matches) == 1:
-        target_group = matches[0]['group_id']
-        operator = AttrDict(bot.get_group_member_info(
-            group_id=target_group, user_id=context.user_id
-        ))
-        operator.name = operator.card or operator.nickname
-        operator_info = '[{title}] {name} ({user_id})'.format_map(operator)
-        print(operator_info, context.raw_message)
-        bot.send_group_msg(group_id=target_group, message=text)
-    else:
+    if context.sender.user_id in limit.black_list:
+        reply = '哼，坏蛋，不理你了！'
+    elif not matches:
+        reply = '''语法：@群名 要发送的消息
+
+        可以将群名的任何一部分作为群名缩写。
+        缩写长度不限，只要不与机器人已加入的其他群的名称相混淆即可。
+        '''
+        reply = strip_lines(reply, '\n').strip()
+    elif len(matches) > 1:
         reply = '「%s」指的是哪个群呢？' % group_key
         reply += '\n' + '\n'.join(
-            '{group_name}（{group_id}）'.format(**group)
+            '{group_name}（{group_id}）'.format_map(group)
             for group in matches
-        ) if matches else ''
-        bot.send(context, reply)
+        )
+    else:
+        bot.send_group_msg(group_id=matches[0]['group_id'], message=text)
+        return
+    bot.send(context, reply)
 
 
 def parse_shell(context) -> str:
@@ -142,7 +122,7 @@ def parse_shell(context) -> str:
     if context.message.startswith('$'):
         command = context.message[1:].strip()
         proc = subprocess.run(command, shell=True, capture_output=True)
-        return proc.stdout.decode(sys.getfilesystemencoding()).strip()
+        return proc.stdout.decode(locale.getpreferredencoding()).strip()
 
     elif context.message.startswith('>>>'):
         command = context.message[3:].strip()
@@ -150,16 +130,14 @@ def parse_shell(context) -> str:
         return '--> ' + result
 
     elif context.message.startswith('//'):
-        try:
-            limit.railway_groups[context.group_id] ^= True  # toggle
-        except KeyError:
+        if context.message_type != 'group':
             return system_info()
+        elif context.group_id in limit.disabled_groups:
+            limit.disabled_groups.discard(context.group_id)
+            return '我回来啦（'
         else:
-            enabled = limit.railway_groups[context.group_id]
-            return '我回来啦（' if enabled else '下班喽~'
-
-    elif context.message_type == 'private':
-        return dict(reply=context.raw_message, auto_escape=True)
+            limit.disabled_groups.add(context.group_id)
+            return '下班喽~'
 
 
 def python_interpreter(source, globals=None, locals=None) -> str:
@@ -202,29 +180,22 @@ def match_identifiers(text: str, remove='-') -> OrderedDict:
     )
 
 
-class RailwayContext(AttrDict):
+class GroupMessageHandler(AttrDict):
 
-    def __init__(self, context=None):
+    def __init__(context, original_context: dict):
         'Extract identifiers from the message.'
-        if context is None:
-            return super().__init__()
-        self.update(
-            bot.get_group_member_info(**context)
-            if context.message_type == 'group' and context.user_id != 1000000
-            else dict(title='')
-        )
-        self.update(context)
-        self.mentioned = re.findall(limit.self, context.raw_message)
-        self.identifiers = match_identifiers(context.message)
+        context.update(original_context)
+        notification = '[CQ:at,qq={self_id}]'.format_map(context)
+        context.notified = notification in context.raw_message
+        context.mentioned = re.findall(limit.self, context.raw_message)
+        context.identifiers = match_identifiers(context.message)
+        context.sender.setdefault('title', '')
 
     def __call__(context) -> bool:
         'Response the query.'
         unknown_items = (
-            any((
-                context.notified,
-                context.mentioned,
-                context.message_type == 'private'
-            )) and
+            context.message_type == 'group' and
+            (context.notified or context.mentioned) and
             context.greeting_filter() and
             context.abuse_filter() and
             context.speed_filter() and
@@ -267,15 +238,15 @@ class RailwayContext(AttrDict):
 
         if isinstance(response, str):
             response = [response]
-        if context.user_id in limit.black_list and len(response) >= 3:
+        if context.sender.user_id in limit.black_list and len(response) >= 3:
             reply = 2
-        elif context.title and len(response) >= 2:
+        elif context.sender.title and len(response) >= 2:
             reply = 1
         else:
             reply = 0
         reply = random.choice(response[reply].split('|'))
         if reply:
-            bot.send(context, reply.format(context.title))
+            bot.send(context, reply.format(context.sender.title))
 
     def abuse_filter(context) -> bool:
         'Ignore the stop words and reject the bad words.'
@@ -284,7 +255,7 @@ class RailwayContext(AttrDict):
         for pattern in [limit.self, r'^\W+']:
             context.message = re.sub(pattern, '', context.message)
 
-        if context.user_id in limit.administrators:
+        if context.sender.user_id in limit.administrators:
             return True
         elif (
             len(context.identifiers) > limit.max_queries or
@@ -292,9 +263,9 @@ class RailwayContext(AttrDict):
             any(re.search(limit.bad_words, i) for i in context.identifiers)
         ):
             reply = '哼，不许捣乱！'
-        elif context.user_id in limit.black_list:
+        elif context.sender.user_id in limit.black_list:
             reply = '哼，坏蛋，不告诉你！'
-        elif not limit.railway_groups.get(context.group_id, True):
+        elif context.group_id in limit.disabled_groups:
             reply = '下班了，明天见~'
         else:
             return True
@@ -308,11 +279,11 @@ class RailwayContext(AttrDict):
         )
         if not throttle_required:
             return True
-        elif context.user_id not in limit.administrators and limit():
+        elif context.sender.user_id not in limit.administrators and limit():
             bot.send(context, '哼，不理你了！')
             return
-        elif context.title:
-            reply = '好的，%s' % context.title
+        elif context.sender.title:
+            reply = '好的，%s' % context.sender.title
         else:
             reply = '好的，%s/%s，收到/嗯，%s/%s，明白/%s，知道了'
             reply = random.choice(reply.split('/'))
@@ -669,9 +640,8 @@ def initialize(config_file: str):
     limit = Limit()
     with open(config_file) as f:
         limit.update(json.load(f))
-
-    key = 'railway_groups'
-    limit[key] = {group: True for group in limit.get(key, [])}
+    for key in ['administrators', 'black_list', 'disabled_groups']:
+        limit[key] = set(limit.get(key, []))
 
     key = 'wiki_sites'
     with ThreadPoolExecutor() as executor:

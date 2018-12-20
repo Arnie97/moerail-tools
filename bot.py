@@ -193,6 +193,7 @@ class GroupMessageHandler(AttrDict):
 
     def __call__(context) -> bool:
         'Response the query.'
+        # short-circuit evaluation, stops at the first match
         unknown_items = (
             context.message_type == 'group' and
             (context.notified or context.mentioned) and
@@ -207,10 +208,16 @@ class GroupMessageHandler(AttrDict):
                 for i in context.identifiers
             ]
         )
-        if not unknown_items:
-            return
-        elif all(unknown_items) and not context.wiki_filter():
-            return
+        if (  # if the message is understandable as a whole, i.e.
+            not unknown_items or  # a) greeting keywords found in the message
+            all(unknown_items) and  # b) no identifiers were understood yet :(
+            # if the whole message is not just a single identifier,
+            context.message not in context.identifiers.values() and
+            # and it matches a wiki article without word segmentation
+            not context.wiki_filter()
+        ):
+            return  # then stop here and forget about identifiers
+
         unknown_items = [
             context.identifiers[i]
             for unknown, i in zip(unknown_items, context.identifiers)
@@ -252,7 +259,7 @@ class GroupMessageHandler(AttrDict):
         'Ignore the stop words and reject the bad words.'
         if re.search(limit.stop_words, context.message):
             return
-        for pattern in [limit.self, r'^\W+']:
+        for pattern in [limit.self, r'^\W+', r'\s+$']:
             context.message = re.sub(pattern, '', context.message)
 
         if context.sender.user_id in limit.administrators:
@@ -287,7 +294,7 @@ class GroupMessageHandler(AttrDict):
         else:
             reply = '好的，%s/%s，收到/嗯，%s/%s，明白/%s，知道了'
             reply = random.choice(reply.split('/'))
-            reply %= ' '.join(context.identifiers)
+            reply %= ' '.join(context.identifiers.values())
         bot.send(context, reply)
         return True
 
@@ -364,9 +371,8 @@ class GroupMessageHandler(AttrDict):
         )
         if not prefix_matches:
             return True
-        reply = '''
-            {0}… 你指的是 {1} 之类的吗？
-        '''.strip().format(i, '、'.join(prefix_matches))
+        reply = '%s… 你是指 %s 之类的吗？'
+        reply %= (context.identifiers[i], '、'.join(prefix_matches))
         bot.send(context, reply)
 
     def wildcard_train_filter(context, i: str) -> bool:

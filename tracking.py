@@ -1,5 +1,7 @@
 #!/usr/bin/env python3
 
+import base64
+import json
 import io
 import re
 
@@ -42,7 +44,13 @@ class Tracking(API):
         data = {'hwzz.' + k: v for k, v in kwargs.items()}
         response = self.fetch('hwzz_uouii.action', data=data)
         assert response.success, response.get('message', response.get('msg'))
-        return AttrDict(response.object[0])
+        return AttrDict(self.decipher(response.object)[0])
+
+    def decipher(self, s: str):
+        'Decipher the base64-encoded messages.'
+        for trim in 0, 0, 8:
+            s = base64.b64decode(s[:len(s) - trim])
+        return json.loads(s.decode('utf-8'))
 
     def track_car(self, car_no: str='0000000') -> AttrDict:
         'Track your rail shipment by car number.'
@@ -81,12 +89,15 @@ class Tracking(API):
             'dz': 'destStation',
             'pm': 'cdyName',
             'xh': 'carNo',
+            'xt': 'arrDepId',
+            'carType': 'carKind',
             'tyrName': 'shpName',
             'conName': 'shpName',
             'wbID': 'wbNbr',
         }
         for k, v in converters.items():
-            info[v] = info[v] or info[k]
+            info[k] = info.get(k, '')
+            info[v] = info.get(v) or info[k]
 
         if info.conName == info.shpName:
             info.conName = ''
@@ -113,16 +124,14 @@ class Tracking(API):
             info.train = ' %s 次列车' % info.trainId
 
         info.arrDep = {
-            '': dict(A='到达', D='离开').get(info.arrDepId),
-            '在站': '到达',
-            '在途': '离开',
-        }.get(info.xt) or '到达'
+            'A': '到达', 'D': '离开', '在站': '到达', '在途': '离开',
+        }.get(info.arrDepId, '到达')
 
         explanation = '''
         截至 {eventDate} 时为止，您查询的{shpName[由{}托运{conName}的]}
         {carNo[ {} 号]}{carType[ {} 型]}{carKind}
         {cdyStation[已从{cdyAdm}{}站发出，]}
-        {destStation[前往{destAdm}{}站，]}%s{cdyName[。该车]}
+        {destStation[正前往{destAdm}{}站，]}%s{cdyName[。该车]}
         {train[现被编入{}]}{trainOrder[机后第 {} 位]}{train[，]}
         目前已{arrDep}{eventProvince[位于{}{eventCity}的]}
         {eventAdm}{eventStation}站

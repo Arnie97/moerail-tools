@@ -19,7 +19,7 @@ class FilterFormatter(string.Formatter):
     def get_field(self, field_name, args, kwargs):
         'Return the argument formatted by the format string in the brackets.'
         first, rest = string._string.formatter_field_name_split(field_name)
-        obj = args[first] if isinstance(first, int) else kwargs.get(first)
+        obj = args[first] if isinstance(first, int) else kwargs.get(first, '')
 
         for is_attr, i in rest:
             if is_attr:

@@ -79,8 +79,8 @@ class Automation():
         self.hproc = k.OpenProcess(PROCESS_READ_WRITE_QUERY, False, pid)
         assert self.hproc, 'Memory access denied'
 
-        self.empty = PIL.Image.open(module_dir('empty.png'))
         self.mask = PIL.Image.open(module_dir('mask.png'))
+        self.empty = PIL.Image.new('1', self.mask.size, 1)
 
     def __del__(self):
         if hasattr(self, 'hproc'):

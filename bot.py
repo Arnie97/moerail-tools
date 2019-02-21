@@ -206,6 +206,7 @@ class GroupMessageHandler(AttrDict):
                 context.model_filter(i) and
                 context.train_filter(i) and
                 context.tracking_filter(i) and
+                context.qrcode_filter(i) and
                 context.winsky_filter(i)
                 for i in context.identifiers
             ]
@@ -273,7 +274,7 @@ class GroupMessageHandler(AttrDict):
         ):
             reply = '哼，不许捣乱！'
         elif context.sender.user_id in limit.black_list:
-            reply = '哼，坏蛋，不告诉你！'
+            reply = '哼，坏蛋，不理你了！'
         elif context.group_id in limit.disabled_groups:
             reply = '下班了，明天见~'
         else:
@@ -455,6 +456,40 @@ class GroupMessageHandler(AttrDict):
             bot.send(context, strip_lines(reply))
             return
         return True
+
+    def qrcode_filter(context, i) -> bool:
+        'Provide EMU tracking.'
+        reply = '''
+            您查询的 {0} 号二维码位于{railModelName} {carNo} 动车
+            组 {carriageNO} 车 {rowNO} 排 {seatNO} 席位。
+            {train[截至 {lastUpdatetime} 时为止，]}
+            该车配属于{inStation}{train[，正在担当{}列车]}。
+        '''
+        if i in known_models:
+            i = known_models[i]
+        if not re.fullmatch(r'PQ\d{7}', i):
+            return True
+
+        from pyquery import PyQuery
+        url = 'http://portal.xiuxiu365.cn/portal/qrcode/'
+        try:
+            info = PyQuery(url + i)('#loc_info').val()
+            assert info
+        except:
+            reply = '找不到这个二维码诶。'
+        else:
+            info = AttrDict(json.loads(info))
+            info.carNo = info.hardCode.rpartition('-')[0]
+            k = info.carNo.replace('-', '')
+            if k not in known_models:
+                known_models[k] = i
+            if info.trainNumber in trains:
+                info.train = '由{1}站开往{2}站的 {0} 次'.format(*trains[trains[info.trainNumber]])
+            elif info.trainNumber:
+                info.train = ' {0} 次'.format(info.trainNumber)
+            reply = api.format(strip_lines(reply), i, **info)
+        finally:
+            bot.send(context, reply)
 
 
 def wiki_extract(site: mwclient.Site, titles: str, **kwargs) -> Iterable[Dict]:

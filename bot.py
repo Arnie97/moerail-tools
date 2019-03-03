@@ -207,7 +207,8 @@ class GroupMessageHandler(AttrDict):
                 context.train_filter(i) and
                 context.tracking_filter(i) and
                 context.qrcode_filter(i) and
-                context.winsky_filter(i)
+                context.winsky_filter(i) and
+                context.flight_filter(i)
                 for i in context.identifiers
             ]
         )
@@ -457,6 +458,37 @@ class GroupMessageHandler(AttrDict):
             return
         return True
 
+    def flight_filter(context, i) -> bool:
+        'Get flight information from FlightAware.'
+        i = context.identifiers[i]
+        if not re.match('[A-Z0-9][A-Z]{1,2}[0-9]{2,}', i):
+            return True
+
+        url = 'https://zh.flightaware.com/live/flight/' + i
+        page = requests.get(url).text
+        airline = re.search(r'<title>(.+) \(\w\w\)  #\w+.+</title>', page)
+        if not airline:
+            return True
+
+        details = re.search(r'var trackpollBootstrap = (.+);', page)
+        details = json.loads(details.group(1))
+        details = next(iter(details['flights'].values()))
+        details.update(
+            airline=airline.group(1),
+            aircraft=details['aircraft']['friendlyType'],
+        )
+        for airport in 'origin', 'destination':
+            d = details[airport]
+            d['name'] = airports.get(d['iata'], d['friendlyName'])
+            explain = '{name}（{iata}，{icao}）{terminal[T{} 航站楼]}'
+            details[airport] = api.format(explain, **d)
+        reply = '''
+            {airline} {iataIdent} 航班，
+            由{origin}出发，飞往{destination}。
+            {aircraft[航班由 {} 执飞。]}
+        '''
+        bot.send(context, api.format(strip_lines(reply), **details))
+
     def qrcode_filter(context, i) -> bool:
         'Provide EMU tracking.'
         reply = '''
@@ -701,6 +733,7 @@ def initialize(config_file: str):
         globals()[key] = list(executor.map(mwclient.Site, limit.get(key, [])))
 
     databases = {
+        'airports': ['airports_json'],
         'known_models': ['serial_json'],
         'known_traces': ['traces_json'],
         'emu_patterns': ['emu_json', lambda f: json.load(f)[':']],

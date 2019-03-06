@@ -203,11 +203,11 @@ class GroupMessageHandler(AttrDict):
             context.abuse_filter() and
             context.speed_filter() and
             [
+                context.winsky_filter(i) and
                 context.model_filter(i) and
                 context.train_filter(i) and
                 context.tracking_filter(i) and
                 context.qrcode_filter(i) and
-                context.winsky_filter(i) and
                 context.flight_filter(i)
                 for i in context.identifiers
             ]
@@ -284,8 +284,9 @@ class GroupMessageHandler(AttrDict):
 
     def speed_filter(context) -> bool:
         'Limit the time-consuming requests.'
-        throttle_required = any(
-            count or re.fullmatch(CAR_OR_CONTAINER_PATTERN, i)
+        roger_required = any(re.fullmatch(CAR_OR_CONTAINER_PATTERN, i) for i in context.identifiers)
+        throttle_required = roger_required or any(
+            count or i.startswith('PQ')
             for count, i in enumerate(context.identifiers)
         )
         if not throttle_required:
@@ -293,6 +294,8 @@ class GroupMessageHandler(AttrDict):
         elif context.sender.user_id not in limit.administrators and limit():
             bot.send(context, '哼，不理你了！')
             return
+        elif not roger_required:
+            return True
         elif context.sender.title:
             reply = '好的，%s' % context.sender.title
         else:
@@ -430,6 +433,77 @@ class GroupMessageHandler(AttrDict):
             return
         return titles
 
+    def flight_filter(context, i) -> bool:
+        'Get flight information from FlightAware.'
+        i = context.identifiers[i]
+        if not re.match('[A-Z0-9]{2,3}[0-9]', i):
+            return True
+
+        url = 'https://zh.flightaware.com/live/flight/' + i
+        page = requests.get(url).text
+        airline = re.search(r'<title>(.+) \(\w\w\)  #\w+.+</title>', page)
+        if not airline:
+            return True
+
+        details = re.search(r'var trackpollBootstrap = (.+);', page)
+        details = json.loads(details.group(1))
+        details = next(iter(details['flights'].values()))
+        details.update(
+            airline=airline.group(1),
+            aircraft=details['aircraft']['friendlyType'],
+        )
+        for airport in 'origin', 'destination':
+            d = details[airport]
+            d['name'] = airports.get(d['iata'], ' ' + d['friendlyName'])
+            explain = '{name}（{iata}，{icao}）{terminal[T{} 航站楼]}'
+            details[airport] = api.format(explain, **d)
+        reply = '''
+            {airline} {iataIdent} 航班，
+            由{origin}出发，飞往{destination}。
+            {aircraft[航班由 {} 执飞。]}
+        '''
+        bot.send(context, api.format(strip_lines(reply), **details))
+
+    def qrcode_filter(context, i) -> bool:
+        'Provide EMU tracking.'
+        reply = '''
+            您查询的 {0} 号二维码位于{railModelName} {carNo} 动车
+            组 {carriageNO} 车 {rowNO} 排 {seatNO} 席位。
+            {lastUpdatetime[截至 {} 时为止，]}
+            该车配属于{inStation}{train[，正在担当{}列车]}。
+        '''
+        if i in known_models:
+            i = known_models[i]
+        if not re.fullmatch(r'PQ\d{7}', i):
+            return True
+
+        from pyquery import PyQuery
+        url = 'http://shportal.xiuxiu365.cn/portal/qrcode/'
+        try:
+            info_json = PyQuery(url + i)('#loc_info').val()
+            assert info_json
+        except:
+            reply = '找不到这个二维码诶。'
+        else:
+            info = AttrDict(json.loads(info_json))
+            info.carNo = info.hardCode.rpartition('-')[0]
+            k = info.carNo.replace('-', '')
+            if k not in known_models:
+                known_models[k] = i
+            if info.lastUpdatetime < '1':
+                loc_info = requests.get('https://g.xiuxiu365.cn/train_api/sh/seatinfoUpdateJs', dict(loc_info=info_json), verify=False).text
+                if loc_info:
+                    info.trainNumber = re.search(r"(?a)(?<=')\w+", loc_info).group(0)
+                    print(info)
+                info.lastUpdatetime = ''
+            if info.trainNumber in trains:
+                info.train = '由{1}站开往{2}站的 {0} 次'.format(*trains[trains[info.trainNumber]])
+            elif info.trainNumber:
+                info.train = ' {0} 次'.format(info.trainNumber)
+            reply = api.format(strip_lines(reply), i, **info)
+        finally:
+            bot.send(context, reply)
+
     def winsky_filter(context, i) -> bool:
         'Return the first matching item from the aircraft database.'
         reply = '''
@@ -457,71 +531,6 @@ class GroupMessageHandler(AttrDict):
             bot.send(context, strip_lines(reply))
             return
         return True
-
-    def flight_filter(context, i) -> bool:
-        'Get flight information from FlightAware.'
-        i = context.identifiers[i]
-        if not re.match('[A-Z0-9][A-Z]{1,2}[0-9]{2,}', i):
-            return True
-
-        url = 'https://zh.flightaware.com/live/flight/' + i
-        page = requests.get(url).text
-        airline = re.search(r'<title>(.+) \(\w\w\)  #\w+.+</title>', page)
-        if not airline:
-            return True
-
-        details = re.search(r'var trackpollBootstrap = (.+);', page)
-        details = json.loads(details.group(1))
-        details = next(iter(details['flights'].values()))
-        details.update(
-            airline=airline.group(1),
-            aircraft=details['aircraft']['friendlyType'],
-        )
-        for airport in 'origin', 'destination':
-            d = details[airport]
-            d['name'] = airports.get(d['iata'], d['friendlyName'])
-            explain = '{name}（{iata}，{icao}）{terminal[T{} 航站楼]}'
-            details[airport] = api.format(explain, **d)
-        reply = '''
-            {airline} {iataIdent} 航班，
-            由{origin}出发，飞往{destination}。
-            {aircraft[航班由 {} 执飞。]}
-        '''
-        bot.send(context, api.format(strip_lines(reply), **details))
-
-    def qrcode_filter(context, i) -> bool:
-        'Provide EMU tracking.'
-        reply = '''
-            您查询的 {0} 号二维码位于{railModelName} {carNo} 动车
-            组 {carriageNO} 车 {rowNO} 排 {seatNO} 席位。
-            {train[截至 {lastUpdatetime} 时为止，]}
-            该车配属于{inStation}{train[，正在担当{}列车]}。
-        '''
-        if i in known_models:
-            i = known_models[i]
-        if not re.fullmatch(r'PQ\d{7}', i):
-            return True
-
-        from pyquery import PyQuery
-        url = 'http://portal.xiuxiu365.cn/portal/qrcode/'
-        try:
-            info = PyQuery(url + i)('#loc_info').val()
-            assert info
-        except:
-            reply = '找不到这个二维码诶。'
-        else:
-            info = AttrDict(json.loads(info))
-            info.carNo = info.hardCode.rpartition('-')[0]
-            k = info.carNo.replace('-', '')
-            if k not in known_models:
-                known_models[k] = i
-            if info.trainNumber in trains:
-                info.train = '由{1}站开往{2}站的 {0} 次'.format(*trains[trains[info.trainNumber]])
-            elif info.trainNumber:
-                info.train = ' {0} 次'.format(info.trainNumber)
-            reply = api.format(strip_lines(reply), i, **info)
-        finally:
-            bot.send(context, reply)
 
 
 def wiki_extract(site: mwclient.Site, titles: str, **kwargs) -> Iterable[Dict]:
@@ -627,7 +636,7 @@ class TrainRange:
 
 def normalize_freight_train_number(train: str) -> str:
     'Try to remove prefixes and suffixes to comprehend the train number.'
-    match = re.search(r'(?<!\d)[1-9]\d{4,}|X\d{3,4}(?!\d)', train)
+    match = re.search(r'(?<!\d)[1-9]\d{4,}|^X\d{3,4}(?!\d)', train)
     if match:
         return match.group(0)
 

@@ -3,15 +3,31 @@
 import sys
 import PIL.Image
 import PIL.ImageChops
+from typing import Iterable
 
 
-def trim_columns(img, threshold: int):
-    'Remove continuous identical columns from the image.'
+def fit_width(img, expected_width: int):
+    'Filter out identical columns from the image to fit the expected width.'
     img = img.transpose(PIL.Image.TRANSPOSE)
     pixels = bytes(img.getdata())
+    columns = [
+        pixels[offset:offset + img.width]
+        for offset in range(0, len(pixels), img.width)
+    ]
+    for threshold in 100, 80, 60, 40, 20, 15, 10, 5, 4, 3, 2:
+        columns = unique(columns, threshold)
+        if len(columns) <= expected_width:
+            padding_width = expected_width - len(columns)
+            columns.insert(0, padding_width * columns[0])
+            img.putdata(b''.join(columns))
+            img = img.transpose(PIL.Image.TRANSPOSE)
+            return img.crop((0, 0, expected_width, img.height))
+
+
+def unique(columns: Iterable, threshold: int=0):
+    'Remove adjacent duplicates that repeat more than given number of times.'
     new_columns = []
-    for offset in range(0, len(pixels), img.width):
-        column = pixels[offset:offset + img.width]
+    for column in columns:
         if not new_columns or new_columns[-1] != column:
             same_columns = 0
         elif same_columns == threshold:
@@ -19,10 +35,7 @@ def trim_columns(img, threshold: int):
         else:
             same_columns += 1
         new_columns.append(column)
-
-    img.putdata(b''.join(new_columns))
-    img = img.transpose(PIL.Image.TRANSPOSE)
-    return img.crop((0, 0, len(new_columns), img.height))
+    return new_columns
 
 
 def join_img(head, *tail, vertical=False):
@@ -58,23 +71,18 @@ def main(path):
     parts = decompose(img)
     header = join_img(parts.header_left, parts.header_right, vertical=False)
     min_footer_width = PIL.ImageChops.invert(parts.footer).getbbox()[2]
-    if min_footer_width > header.width:
-        return
+    assert min_footer_width <= header.width, 'Footer too long'
     footer = parts.footer.crop((0, 0, header.width, parts.footer.height))
-
-    for threshold in 100, 80, 60, 40, 20, 15, 10, 5, 4, 3, 2:
-        parts.body_right = trim_columns(parts.body_right, threshold)
-        if parts.body_left.width + parts.body_right.width > header.width:
-            continue
-
-        padding_size = header.width - parts.body_right.width, parts.body.height
-        parts.body_left = parts.body.crop((0, 0, *padding_size))
-        body = join_img(parts.body_left, parts.body_right, vertical=False)
-        join_img(header, body, footer, vertical=True).save(path)
-        print(threshold, path)
-        return
+    expected_body_right = header.width - parts.body_left.width
+    parts.body_right = fit_width(parts.body_right, expected_body_right)
+    assert parts.body_right, 'Diagram too large'
+    body = join_img(parts.body_left, parts.body_right, vertical=False)
+    join_img(header, body, footer, vertical=True).save(path)
 
 
 if __name__ == '__main__':
     for path in sys.argv[1:]:
-        main(path)
+        try:
+            main(path)
+        except AssertionError as e:
+            print(path, e.args[0])

@@ -13,6 +13,7 @@ import subprocess
 import sys
 import time
 import traceback
+import warnings
 from collections import OrderedDict
 from concurrent.futures import ThreadPoolExecutor
 from contextlib import redirect_stdout
@@ -207,7 +208,7 @@ class GroupMessageHandler(AttrDict):
                 context.model_filter(i) and
                 context.train_filter(i) and
                 context.tracking_filter(i) and
-                context.qrcode_filter(i) and
+                context.shanghai_filter(i) and
                 context.flight_filter(i)
                 for i in context.identifiers
             ]
@@ -464,42 +465,39 @@ class GroupMessageHandler(AttrDict):
         '''
         bot.send(context, api.format(strip_lines(reply), **details))
 
-    def qrcode_filter(context, i) -> bool:
+    def shanghai_filter(context, i) -> bool:
         'Provide EMU tracking.'
         reply = '''
-            您查询的 {0} 号二维码位于{railModelName} {carNo} 动车
-            组 {carriageNO} 车 {rowNO} 排 {seatNO} 席位。
-            {lastUpdatetime[截至 {} 时为止，]}
-            该车配属于{inStation}{train[，正在担当{}列车]}。
+            您查询的 {sku} 号二维码位于{modelTypeName}{modelType} {cdh} 动车
+            组 {coachNo} {coachTypeName[号{}]}车 {seatRowNo} 排 {seatName} 席位。
+            {train[该车组正在担当{}列车。]}
         '''
         if i in known_models:
             i = known_models[i]
         if not re.fullmatch(r'PQ\d{7}', i):
             return True
 
-        from pyquery import PyQuery
-        url = 'http://shportal.xiuxiu365.cn/portal/qrcode/'
+        url = 'https://g.xiuxiu365.cn/railway_api/web/index/train'
         try:
-            info_json = PyQuery(url + i)('#loc_info').val()
-            assert info_json
-        except:
+            info = requests.get(url, dict(pqCode=i), verify=False).json()
+            assert info['code'] == 200
+            info = AttrDict(info['data'])
+        except AssertionError:
             reply = '找不到这个二维码诶。'
+        except:
+            reply = '咦，{} 怎么没查出来，等会儿再试试？'.format(i)
         else:
-            info = AttrDict(json.loads(info_json))
-            info.carNo = info.hardCode.rpartition('-')[0]
-            k = info.carNo.replace('-', '')
-            if k not in known_models:
+            k = info.cdh.replace('-', '')
+            if k and k not in known_models:
                 known_models[k] = i
-            if info.lastUpdatetime < '1':
-                loc_info = requests.get('https://g.xiuxiu365.cn/train_api/sh/seatinfoUpdateJs', dict(loc_info=info_json), verify=False).text
-                if loc_info:
-                    info.trainNumber = re.search(r"(?a)(?<=')\w+", loc_info).group(0)
-                    print(info)
-                info.lastUpdatetime = ''
-            if info.trainNumber in trains:
-                info.train = '由{1}站开往{2}站的 {0} 次'.format(*trains[trains[info.trainNumber]])
-            elif info.trainNumber:
-                info.train = ' {0} 次'.format(info.trainNumber)
+            if info.trainName:
+                trainNo = re.match(r'[A-Z][0-9]+', info.trainName)
+                if trainNo:
+                    trainNo = trainNo.group(0)
+                if trainNo and trainNo in trains:
+                    info.train = '由{1}站开往{2}站的 {0} 次'.format(*trains[trains[trainNo]])
+                elif info.trainName:
+                    info.train = ' {0} 次'.format(info.trainName)
             reply = api.format(strip_lines(reply), i, **info)
         finally:
             bot.send(context, reply)
@@ -786,6 +784,7 @@ def initialize(config_file: str):
 
 if __name__ == '__main__':
     initialize(argv(1) or 'bot_config.json')
+    warnings.filterwarnings('once')
     try:
         bot.run()
     finally:

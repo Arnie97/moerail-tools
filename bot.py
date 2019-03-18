@@ -176,7 +176,7 @@ def system_info() -> str:
 
 def match_identifiers(text: str, remove='-') -> OrderedDict:
     'Return all non-overlapping identifiers in the text, with hyphens removed.'
-    pattern = r'(?a)(?<!\w)([A-Z][-\w]+|\d{4,7}|\w+[A-Z])(?!\w)'
+    pattern = r'(?a)(?<!\w)([A-Z][-\w]+|\d{4,8}|\w+[A-Z]\w*)(?!\w)'
     return OrderedDict(
         (i.replace(remove, ''), i)
         for i in re.findall(pattern, text)
@@ -209,6 +209,7 @@ class GroupMessageHandler(AttrDict):
                 context.train_filter(i) and
                 context.tracking_filter(i) and
                 context.shanghai_filter(i) and
+                context.beijing_filter(i) and
                 context.flight_filter(i)
                 for i in context.identifiers
             ]
@@ -466,7 +467,7 @@ class GroupMessageHandler(AttrDict):
         bot.send(context, api.format(strip_lines(reply), **details))
 
     def shanghai_filter(context, i) -> bool:
-        'Provide EMU tracking.'
+        'Track the electric multiple units operated by CR Shanghai.'
         reply = '''
             您查询的 {sku} 号二维码位于{modelTypeName}{modelType} {cdh} 动车
             组 {coachNo} {coachTypeName[号{}]}车 {seatRowNo} 排 {seatName} 席位。
@@ -501,6 +502,40 @@ class GroupMessageHandler(AttrDict):
             reply = api.format(strip_lines(reply), i, **info)
         finally:
             bot.send(context, reply)
+
+    def beijing_filter(context, i) -> bool:
+        'Track the electric multiple units operated by CR Beijing.'
+        reply = '''
+            您查询的 {QrCode} 号二维码位于 {TrainId} 号动车
+            组 {CarriageNo} 车 {Seatorder} 排 {SeatNo} 席位。
+            {TrainnoDate[截至 {} 为止，]}
+            {train[该车正在担当{}列车]}。
+        '''
+        if i in known_models:
+            i = known_models[i]
+        if not re.fullmatch(r'\d{8}', i):
+            return True
+
+        from hashlib import md5
+        url = 'https://aymaoto.jtlf.cn/webapi/otoshopping/ewh_getqrcodetrainnoinfo'
+        signature = 'qrcode=%s&key=ltRsjkiM8IRbC80Ni1jzU5jiO6pJvbKd' % i
+        data = dict(qrCode=i, sign=md5(signature.encode()).hexdigest())
+        info = AttrDict(requests.post(url, data).json())
+        if info.State == 400:
+            reply = '找不到这个二维码诶。'
+        else:
+            info = AttrDict(info['data']['TrainInfo'])
+
+            t = info.TrainId.replace('-', '')
+            if t not in known_models or i.endswith('000'):
+                known_models[t] = i
+
+            if info.TrainnoId in trains:
+                info.train = '由{1}站开往{2}站的 {0} 次'.format(*trains[trains[info.TrainnoId]])
+            elif info.TrainnoId:
+                info.train = ' {0} 次'.format(info.TrainnoId)
+            reply = api.format(strip_lines(reply), **info)
+        bot.send(context, reply)
 
     def winsky_filter(context, i) -> bool:
         'Return the first matching item from the aircraft database.'

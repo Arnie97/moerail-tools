@@ -162,14 +162,17 @@ def system_info() -> str:
     reply = '''
         {0.node} (up {1} days, {2})
         {0.system} {0.release}
-        {3} {4[0]}
+        {3} {4}
         CoolQ HTTP API v{5[plugin_version]}
     '''
     uptime = datetime.timedelta(seconds=time.monotonic())
     uptime_hms = time.strftime('%H:%M:%S', time.gmtime(uptime.seconds))
+    python_version = platform.python_build()[0]
+    if platform.python_version() not in python_version:
+        python_version = 'v%s (%s)' % (platform.python_version(), python_version)
     return strip_lines(reply, '\n').strip().format(
         platform.uname(), uptime.days, uptime_hms,
-        platform.python_implementation(), platform.python_build(),
+        platform.python_implementation(), python_version,
         bot.get_version_info(),
     )
 

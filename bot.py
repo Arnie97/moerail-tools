@@ -195,7 +195,10 @@ class GroupMessageHandler(AttrDict):
         context.notified = notification in context.raw_message
         context.mentioned = re.findall(limit.self, context.raw_message)
         context.identifiers = match_identifiers(context.message)
-        context.sender.setdefault('title', '')
+        context.sender.title = (
+            context.sender.get('title') or
+            limit.titles.get(context.sender.user_id, '')
+        )
 
     def __call__(context) -> bool:
         'Response the query.'
@@ -770,6 +773,7 @@ def initialize(config_file: str):
     limit = Limit()
     with open(config_file) as f:
         limit.update(json.load(f))
+    limit.titles = {v: k for k, v in limit.get('titles', {}).items()}
     for key in ['administrators', 'black_list', 'disabled_groups']:
         limit[key] = set(limit.get(key, []))
 

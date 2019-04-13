@@ -17,6 +17,7 @@ import warnings
 from collections import OrderedDict
 from concurrent.futures import ThreadPoolExecutor
 from contextlib import redirect_stdout
+from difflib import get_close_matches
 from itertools import chain, islice
 from string import ascii_uppercase
 from typing import Callable, Dict, Iterable, Tuple
@@ -389,14 +390,20 @@ class GroupMessageHandler(AttrDict):
 
     def wildcard_model_filter(context, i: str) -> bool:
         'Match incomplete model names.'
-        prefix_matches = sorted(
-            model for model in set(chain(known_models, trainnets))
+        keys = set(chain(known_models, trainnets))
+        if not i.isdigit():
+            matches = get_close_matches(i, keys)
+            keys -= set(matches)
+        else:
+            matches = []
+        matches += sorted(
+            model for model in keys
             if (i in model or model in i) and len(model) > 1
         )
-        if not prefix_matches:
+        if not matches:
             return True
         reply = '%s… 你是指 %s 之类的吗？'
-        reply %= (context.identifiers[i], '、'.join(prefix_matches))
+        reply %= (context.identifiers[i], '、'.join(matches[:6]))
         bot.send(context, reply)
 
     def wildcard_train_filter(context, i: str) -> bool:

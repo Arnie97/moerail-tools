@@ -408,21 +408,27 @@ class GroupMessageHandler(AttrDict):
         titles = context.identifiers[i] if i else context.message
         if not titles:
             return True
+        elif titles.endswith('线'):
+            titles += '|%s铁路' % titles[:-1]
 
         with ThreadPoolExecutor() as executor:
-            pages = executor.map(
-                lambda site: AttrDict(next(wiki_extract(site, titles))),
+            all_results = executor.map(
+                lambda site: (site, wiki_extract(site, titles=titles)),
                 wiki_sites
             )
-        for page, site in zip(pages, wiki_sites):
-            if 'missing' in page:
-                continue
+        valid_results = (
+            (site, AttrDict(page))
+            for site, pages in all_results
+            for page in pages
+            if 'missing' not in page
+        )
+        for site, page in valid_results:
             # based on code from OpenSearchXml by Brion Vibber
             sentence_boundaries = r'[.!?](?:[ \n]|$)|[。．！？｡]'
             # use the first five lines as text extract if no sentences found
             if not re.search(sentence_boundaries, page.extract):
                 page = AttrDict(next(wiki_extract(
-                    site, titles, exintro=None, exsentences=None
+                    site, pageids=page.pageid, exintro=None, exsentences=None
                 )))
                 non_empty_lines = filter(None, page.extract.splitlines())
                 page.extract = '\n'.join(islice(non_empty_lines, 5))
@@ -459,13 +465,12 @@ class GroupMessageHandler(AttrDict):
         return True
 
 
-def wiki_extract(site: mwclient.Site, titles: str, **kwargs) -> Iterable[Dict]:
+def wiki_extract(site: mwclient.Site, **kwargs) -> Iterable[Dict]:
     'Get plain-text extracts of the given wiki articles.'
     params = AttrDict(
         action='query',
         prop='extracts',
         uselang='zh-cn',
-        titles=titles,
         converttitles=True,
         redirects=True,
         explaintext=True,

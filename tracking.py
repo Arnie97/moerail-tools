@@ -5,6 +5,9 @@ import json
 import io
 import re
 
+from typing import List, Mapping
+from pyquery import PyQuery
+
 from util import module_dir, repl, strip_lines, AttrDict, FilterFormatter
 from tickets import show_image, API
 
@@ -12,53 +15,11 @@ CAR_OR_CONTAINER_PATTERN = r'([A-Z]{4})?[0-9]{7}'
 
 
 class Tracking(API):
-    'http://hyfw.95306.cn/gateway/hywx/TrainWebClient/'
 
     def __init__(self):
-        'Initialize the session.'
+        'Initialize the formatter.'
         super().__init__()
         self.format = FilterFormatter().format
-        response = self.fetch('hwzzPage.action', method='GET', json=False)
-        pattern = '<input id="maths" .+? value="(.+?)" />'
-        self.params[None] = {
-            'mathsid': re.search(pattern, response.text).group(1),
-            'hwzz.yzm': '63FD155B6A364CB4BC1680C1F74B4B37',
-        }
-
-    def load_captcha(self) -> io.BytesIO:
-        'Fetch the CAPTCHA image.'
-        params = dict(math=0, update=self.params[None]['mathsid'])
-        response = self.fetch(
-            'security/jcaptcha.jpg',
-            method='GET', params=params, json=False,
-        )
-        return io.BytesIO(response.content)
-
-    def fill_captcha(self, answer: str):
-        'Save the recognized CAPTCHA text.'
-        self.params[None]['check_code'] = answer
-
-    def track(self, **kwargs) -> AttrDict:
-        'Send the tracking request and parse the response message.'
-        # insert the namespace prefix for each key
-        data = {'hwzz.' + k: v for k, v in kwargs.items()}
-        response = self.fetch('hwzz_uouii.action', data=data)
-        assert response.success, response.get('message', response.get('msg'))
-        return AttrDict(self.decipher(response.object)[0])
-
-    def decipher(self, s: str):
-        'Decipher the base64-encoded messages.'
-        for trim in 0, 0, 8:
-            s = base64.b64decode(s[:len(s) - trim])
-        return json.loads(s.decode('utf-8'))
-
-    def track_car(self, car_no: str='0000000') -> AttrDict:
-        'Track your rail shipment by car number.'
-        return self.track(type=1, carNo=car_no, hph='')
-
-    def track_container(self, container_no: str) -> AttrDict:
-        'Track your rail shipment by container number.'
-        return self.track(type=5, xz=container_no[:4], xh=container_no[4:])
 
     def repl_handler(self, line: str):
         'Catch the exceptions and print the error messages.'
@@ -75,7 +36,9 @@ class Tracking(API):
         finally:
             print()
 
-    def explain(self, info: AttrDict) -> str:
+    def explain(self, info: Mapping[str, object]) -> str:
+        info = AttrDict(info)
+
         'Convert the query result to a human-readable text message.'
         # remove trailing whitespace and null values
         for k, v in info.items():
@@ -122,9 +85,12 @@ class Tracking(API):
                 info.cdyName += '车'
         if info.get('trainId'):
             info.train = ' %s 次列车' % info.trainId
+        if info.get('eventProvince', '').endswith(info.eventStation):
+            info.eventProvince = info.eventProvince[:-len(info.eventStation)]
 
         info.arrDep = {
-            'A': '到达', 'D': '离开', '在站': '到达', '在途': '离开',
+            'A': '到达', '在站': '到达', '到达': '到达',
+            'D': '离开', '在途': '离开', '出发': '离开',
         }.get(info.arrDepId, '到达')
 
         explanation = '''
@@ -140,6 +106,83 @@ class Tracking(API):
         return self.format(strip_lines(explanation), **info)
 
 
+class CrscTracking(Tracking):
+    'http://61.237.227.131/CRSCAL/queryTraceWay.do'
+
+    fields = [
+        'itemNo',
+        'trainId',
+        'carNo',
+        'cdyStation',
+        'destStation',
+        'eventStation',
+        'eventProvince',
+        'eventDate',
+        'arrDepId',
+        'dzlc',
+    ]
+
+    def track_car(self, car_no: str='5624520') -> AttrDict:
+        'Track your rail shipment by car number.'
+        params = {'operFlag': 'chcx', 'qo.truckcode': car_no}
+        page = self.fetch('', params, method='GET', json=False)
+        first_row = PyQuery(page.text)('center tr:nth-child(2)>td')
+        assert first_row, None
+        return dict(zip(
+            self.fields,
+            (cell.text_content().strip() for cell in first_row)
+        ))
+
+
+class HyfwTracking(Tracking):
+    'http://hyfw.95306.cn/gateway/hywx/TrainWebClient/'
+
+    def __init__(self):
+        'Initialize the session.'
+        super().__init__()
+        response = self.fetch('hwzzPage.action', method='GET', json=False)
+        pattern = '<input id="maths" .+? value="(.+?)" />'
+        self.params[None] = {
+            'mathsid': re.search(pattern, response.text).group(1),
+            'hwzz.yzm': '63FD155B6A364CB4BC1680C1F74B4B37',
+        }
+
+    def load_captcha(self) -> io.BytesIO:
+        'Fetch the CAPTCHA image.'
+        params = dict(math=0, update=self.params[None]['mathsid'])
+        response = self.fetch(
+            'security/jcaptcha.jpg',
+            method='GET', params=params, json=False,
+        )
+        return io.BytesIO(response.content)
+
+    def fill_captcha(self, answer: str):
+        'Save the recognized CAPTCHA text.'
+        self.params[None]['check_code'] = answer
+
+    def track(self, **kwargs) -> AttrDict:
+        'Send the tracking request and parse the response message.'
+        # insert the namespace prefix for each key
+        data = {'hwzz.' + k: v for k, v in kwargs.items()}
+        response = self.fetch('hwzz_uouii.action', data=data)
+        assert response.success, response.get('message', response.get('msg'))
+        return self.decipher(response.object)[0]
+
+    def decipher(self, s: str):
+        'Decipher the base64-encoded messages.'
+        for trim in 0, 0, 8:
+            s = base64.b64decode(s[:len(s) - trim])
+        return json.loads(s.decode('utf-8'))
+
+    def track_car(self, car_no: str='0000000') -> AttrDict:
+        'Track your rail shipment by car number.'
+        return self.track(type=1, carNo=car_no, hph='')
+
+    def track_container(self, container_no: str) -> AttrDict:
+        'Track your rail shipment by container number.'
+        return self.track(type=5, xz=container_no[:4], xh=container_no[4:])
+
+
 def solve_captcha(captcha_image: io.BytesIO) -> str:
     'Solve the CAPTCHA image.'
     from captcha.captcha import image_filter, solve
@@ -151,7 +194,7 @@ def solve_captcha(captcha_image: io.BytesIO) -> str:
 
 def auth():
     'Load and answer the CAPTCHA to get a valid session.'
-    x = Tracking()
+    x = HyfwTracking()
     captcha_image = x.load_captcha()
     try:
         x.fill_captcha(solve_captcha(captcha_image))

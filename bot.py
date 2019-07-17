@@ -18,15 +18,17 @@ from concurrent.futures import ThreadPoolExecutor
 from contextlib import redirect_stdout
 from itertools import chain, islice
 from string import ascii_uppercase
-from typing import Dict, Iterable, Tuple
+from typing import Callable, Dict, Iterable, Tuple
 
 from cqhttp import CQHttp
 from util import argv, open, strip_lines, AttrDict
 from trains import load_trains, parse_trains, sort_trains
-from tracking import solve_captcha, Tracking, CAR_OR_CONTAINER_PATTERN
+from tracking import HyfwTracking, CrscTracking
+from tracking import solve_captcha, CAR_OR_CONTAINER_PATTERN
 
 bot = CQHttp('http://localhost:5700/')
-api = Tracking()
+api = HyfwTracking()
+crsc = CrscTracking()
 
 
 def unescape(text: str) -> str:
@@ -346,6 +348,15 @@ class GroupMessageHandler(AttrDict):
             i = known_models[i]
         if not re.fullmatch(CAR_OR_CONTAINER_PATTERN, i):
             return True
+        elif i.isdigit():
+            reply = tracking_handler(crsc.track_car, i)
+            if reply:
+                bot.send(context, reply)
+                return
+            else:
+                method = api.track_car
+        else:
+            method = api.track_container
         try:
             if 'captcha_solved' not in context:
                 api.fill_captcha(solve_captcha(api.load_captcha()))
@@ -353,13 +364,13 @@ class GroupMessageHandler(AttrDict):
             result = None
         else:
             context.captcha_solved = True
-            result = tracking_handler(i)
+            result = tracking_handler(method, i)
         reply = {
             '没有满足条件的查询结果！': '找不到 {} 呢。',
             '货车追踪失败，请稍后再试！': '噫，{}？不告诉你哦~',
             '验证码错误': '咦，{} 怎么没查出来，等会儿再试试？',
             None: '{} 没查出来，再试一次吧（',
-            0: '找不到这个集装箱呢。',
+            0: '找不到 {} 呢。',
         }.get(result, result).format(i)
         bot.send(context, reply)
 
@@ -473,11 +484,12 @@ def winsky_handler(registration: str) -> Iterable[AttrDict]:
         yield AttrDict(matches[i:i + 10])
 
 
-def tracking_handler(number: str) -> str:
+def tracking_handler(method: Callable, number: str) -> str:
     'Track rail freight operations, and save the results for later use.'
-    method = api.track_car if number.isdigit() else api.track_container
     try:
-        info = method(number)
+        info = AttrDict(method(number))
+        assert info, 0
+        info.update(carNo=number, trainId=info.get('trainId', ''))
     except (AssertionError, KeyError) as e:
         return e.args[0]
     except json.decoder.JSONDecodeError as e:

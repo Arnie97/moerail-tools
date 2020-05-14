@@ -19,7 +19,6 @@ from concurrent.futures import ThreadPoolExecutor
 from contextlib import redirect_stdout
 from difflib import get_close_matches
 from itertools import chain, islice
-from string import ascii_uppercase
 from typing import Callable, Dict, Iterable, Tuple
 
 from cqhttp import CQHttp
@@ -236,8 +235,8 @@ class GroupMessageHandler(AttrDict):
             for unknown, i in zip(unknown_items, context.identifiers)
             if unknown and
             context.wiki_filter(i) and
-            context.wildcard_model_filter(i) and
-            context.wildcard_train_filter(i)
+            context.wildcard_train_filter(i) and
+            context.wildcard_model_filter(i)
         ]
         if any(unknown_items):
             reply = '%s 是什么哦，没见过呢'
@@ -293,7 +292,10 @@ class GroupMessageHandler(AttrDict):
 
     def speed_filter(context) -> bool:
         'Limit the time-consuming requests.'
-        roger_required = any(re.fullmatch(CAR_OR_CONTAINER_PATTERN, i) for i in context.identifiers)
+        roger_required = any(
+            CAR_OR_CONTAINER_PATTERN.fullmatch(i)
+            for i in context.identifiers
+        )
         throttle_required = roger_required or any(
             count or i.startswith('PQ')
             for count, i in enumerate(context.identifiers)
@@ -360,7 +362,7 @@ class GroupMessageHandler(AttrDict):
             '''.strip().format(i, known_models[i])
             bot.send(context, reply)
             i = known_models[i]
-        if not re.fullmatch(CAR_OR_CONTAINER_PATTERN, i):
+        if not CAR_OR_CONTAINER_PATTERN.fullmatch(i):
             return True
         elif i.isdigit():
             reply = tracking_handler(crsc.track_car, i)
@@ -654,6 +656,8 @@ class Limit(AttrDict):
 
 class TrainRange:
 
+    TRAIN_NO_PATTERN = re.compile(r'([A-Z]*|00)([0-9]+)')
+
     def __init__(self, first: str, last: str):
         'Parse the range representation.'
         assert first and last
@@ -675,14 +679,10 @@ class TrainRange:
         else:
             return prefix == self.prefix and number in self.range
 
-    @staticmethod
-    def split(train: str) -> Tuple[str, int]:
+    def split(self, train: str) -> Tuple[str, int]:
         'Split the train number into the prefix part and the numeric part.'
-        assert train
-        if train[0] in ascii_uppercase:
-            return train[0], int(train[1:])
-        else:
-            return '', int(train)
+        match = self.TRAIN_NO_PATTERN.fullmatch(train)
+        return match.group(1), int(match.group(2))
 
 
 def normalize_freight_train_number(train: str) -> str:

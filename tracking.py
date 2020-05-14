@@ -11,7 +11,7 @@ from pyquery import PyQuery
 from util import module_dir, repl, strip_lines, AttrDict, FilterFormatter
 from tickets import show_image, API
 
-CAR_OR_CONTAINER_PATTERN = r'([A-Z]{4})?[0-9]{7}'
+CAR_OR_CONTAINER_PATTERN = re.compile(r'([A-Z]{4})?[0-9]{7}')
 
 
 class Tracking(API):
@@ -23,7 +23,7 @@ class Tracking(API):
 
     def repl_handler(self, line: str):
         'Catch the exceptions and print the error messages.'
-        if not re.fullmatch(CAR_OR_CONTAINER_PATTERN, line):
+        if not CAR_OR_CONTAINER_PATTERN.fullmatch(line):
             print('Invalid query:', line)
             return
         method = self.track_car if line.isdigit() else self.track_container

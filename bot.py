@@ -452,6 +452,7 @@ class GroupMessageHandler(AttrDict):
                 )))
                 non_empty_lines = filter(None, page.extract.splitlines())
                 page.extract = '\n'.join(islice(non_empty_lines, 5))
+            page.extract = re.sub(r'\{\\displaystyle.+\}|(\n +)+', ' ', page.extract)
             bot.send(context, page.extract)
             return
         return titles

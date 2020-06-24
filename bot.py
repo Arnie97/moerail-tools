@@ -205,6 +205,7 @@ class GroupMessageHandler(AttrDict):
         # short-circuit evaluation, stops at the first match
         unknown_items = (
             context.message_type == 'group' and
+            context.share_filter() and
             (context.notified or context.mentioned) and
             context.greeting_filter() and
             context.abuse_filter() and
@@ -242,6 +243,26 @@ class GroupMessageHandler(AttrDict):
             reply = '%s 是什么哦，没见过呢'
             reply %= '、'.join(unknown_items)
             bot.send(context, reply)
+
+    def share_filter(context) -> bool:
+        'Convert QQ share cards to plain messages.'
+        match = re.fullmatch(r'''
+            \[CQ:rich,
+                title   = (?P<title>[^\],]+),
+                content = (?P<body>[^\],]+)
+            \]
+        ''', context.raw_message, re.VERBOSE)
+        if not match:
+            return True
+
+        try:
+            body = json.loads(unescape(match.group('body')))['detail_1']
+        except:
+            reply = unescape(match.group('title'))
+        else:
+            reply = '「{title}」{desc}\n{qqdocurl}'
+            reply = api.format_map(reply, **body)
+        bot.send(context, reply)
 
     def greeting_filter(context) -> bool:
         'Get the corresponding greeting messages for preset keywords.'
@@ -282,6 +303,7 @@ class GroupMessageHandler(AttrDict):
             any(re.search(limit.bad_words, i) for i in context.identifiers)
         ):
             reply = '哼，不许捣乱！'
+            bot.set_group_ban(duration=300, **context)
         elif context.sender.user_id in limit.black_list:
             reply = '哼，坏蛋，不理你了！'
         elif context.group_id in limit.disabled_groups:

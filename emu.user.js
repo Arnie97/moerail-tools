@@ -2,7 +2,7 @@
 // @name        动车组交路查询
 // @description 在 12306 订票页面上显示动车组型号与交路
 // @author      Arnie97
-// @version     2019.09.26
+// @version     2020.07.09
 // @license     MIT
 // @namespace   https://github.com/Arnie97
 // @homepageURL https://github.com/Arnie97/emu-tools
@@ -21,6 +21,12 @@ function showTrainModel(trains, trainNo, vehicleNo) {
     var urlPath = 'https://moerail.ml/img/';
     var img = $('<img>');
     var node = $('<a>').addClass('route').text(vehicleNo).append(img);
+    colors.some(function(pair) {
+        if (pair[1].test(vehicleNo)) {
+            node.css('color', pair[0]);
+            return true;
+        }
+    })
     node.mouseenter(function(event) {
         node.unbind('mouseenter');
         img.attr('src', urlPath + trainNo + '.png').error(function() {
@@ -68,6 +74,13 @@ function main() {
     observer.observe($('.t-list>table')[0], {childList: true});
     observer.observe($('.t-list tbody')[0], {childList: true});
 }
+
+var colors = [
+    ['#F70', /CRH6/],
+    ['#C01', /AF/],
+    ['#C84', /BF/],
+    ['#080', /J/],
+];
 
 var stylesheet = ('\
     .ls {                           \

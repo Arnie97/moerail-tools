@@ -487,7 +487,8 @@ class GroupMessageHandler(AttrDict):
 
         url = 'https://zh.flightaware.com/live/flight/' + i
         page = requests.get(url).text
-        airline = re.search(r'<title>(.+) \(\w\w\)  #\w+.+</title>', page)
+        title_pattern = re.compile(r'<title>[A-Z0-9]+([0-9]+) \([A-Z0-9]+\1\) (.+) Flight Tracking and History - FlightAware</title>')
+        airline = title_pattern.search(page)
         if not airline:
             return True
 
@@ -495,7 +496,8 @@ class GroupMessageHandler(AttrDict):
         details = json.loads(details.group(1))
         details = next(iter(details['flights'].values()))
         details.update(
-            airline=airline.group(1),
+            airline=airline.group(2),
+            callsign=details['codeShare']['airline']['callsign'],
             aircraft=details['aircraft']['friendlyType'],
         )
         for airport in 'origin', 'destination':
@@ -504,7 +506,7 @@ class GroupMessageHandler(AttrDict):
             explain = '{name}（{iata}，{icao}）{terminal[T{} 航站楼]}'
             details[airport] = api.format(explain, **d)
         reply = '''
-            {airline} {iataIdent} 航班，
+            {airline} "{callsign}" {iataIdent} 航班，
             由{origin}出发，飞往{destination}。
             {aircraft[航班由 {} 执飞。]}
         '''

@@ -2,7 +2,7 @@
 // @name        动车组交路查询
 // @description 在 12306 订票页面上显示动车组型号与交路
 // @author      Arnie97
-// @version     2020.07.09
+// @version     2021.02.13
 // @license     MIT
 // @namespace   https://github.com/Arnie97
 // @homepageURL https://github.com/Arnie97/emu-tools
@@ -17,19 +17,26 @@
 // ==/UserScript==
 
 // Patch items on the web page
-function showTrainModel(trains, trainNo, vehicleNo) {
+function showTrainModel(parentNode, info) {
     var urlPath = 'https://moerail.ml/img/';
     var img = $('<img>');
-    var node = $('<a>').addClass('route').text(vehicleNo).append(img);
+    var node = $('<a>')
+        .addClass('route')
+        .text(info.emu_no)
+        .attr('title', info.date)
+        .append(img);
+
     colors.some(function(pair) {
-        if (pair[1].test(vehicleNo)) {
+        if (pair[1].test(info.emu_no)) {
             node.css('color', pair[0]);
             return true;
         }
-    })
+    });
+
+    // Preload images on mouse hover
     node.mouseenter(function(event) {
         node.unbind('mouseenter');
-        img.attr('src', urlPath + trainNo + '.png').error(function() {
+        img.attr('src', urlPath + info.train_no + '.png').error(function() {
             $(this).unbind('error').attr('src', urlPath + '404.png');
         });
     });
@@ -37,7 +44,7 @@ function showTrainModel(trains, trainNo, vehicleNo) {
         node.mouseenter();
         img.toggle();
     });
-    $(trains[trainNo]).find('.ls>span, td:nth-child(3)').contents().replaceWith(node);
+    $(parentNode).find('.ls>span, td:nth-child(3)').contents().replaceWith(node);
 }
 
 // Iterate through the items
@@ -47,16 +54,25 @@ function checkPage() {
         return;
     }
 
-    var trains = {};
-    trainNodes.each(function(i, node) {
-        var trainNo = $(node).find('a.number').text();
-        trains[trainNo] = node;
-    });
+    var trainNumbers = Array.from(trainNodes.map(function(index, node) {
+        return $(node).find('a.number').text();
+    }));
 
-    $.getJSON('https://api.moerail.ml/train/' + Object.keys(trains).join(','), function(results) {
+    var url = 'https://api.moerail.ml/train/,' + trainNumbers.join(',');
+    $.getJSON(url, function(results) {
         console.log('EMU Tools:', results.length, 'results found');
-        results.forEach(function(item) {
-            showTrainModel(trains, item.train_no, item.emu_no);
+
+        // Convert array to map
+        var trains = {};
+        results.forEach(function(info) {
+            trains[info.train_no] = info;
+        });
+
+        trainNodes.each(function(index, node) {
+            var info = trains[trainNumbers[index]];
+            if (info) {
+                showTrainModel(node, info);
+            }
         });
     });
 }
@@ -76,7 +92,7 @@ function main() {
 }
 
 var colors = [
-    ['#F70', /CRH6/],
+    ['#F80', /CRH6/],
     ['#C01', /AF/],
     ['#C84', /BF/],
     ['#080', /J/],

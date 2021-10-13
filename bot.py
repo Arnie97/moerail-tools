@@ -456,7 +456,7 @@ class GroupMessageHandler(AttrDict):
         with ThreadPoolExecutor() as executor:
             all_results = executor.map(
                 lambda site: (site, wiki_extract(site, titles=titles)),
-                wiki_sites
+                limit.wiki_sites
             )
         valid_results = (
             (site, AttrDict(page))
@@ -614,6 +614,9 @@ class GroupMessageHandler(AttrDict):
 
 def wiki_extract(site: mwclient.Site, **kwargs) -> Iterable[Dict]:
     'Get plain-text extracts of the given wiki articles.'
+    if not site.writing_script_pattern.search(kwargs.get('titles', '')):
+        return
+
     params = AttrDict(
         action='query',
         prop='extracts',
@@ -814,9 +817,12 @@ def initialize(config_file: str):
     for key in ['administrators', 'black_list', 'disabled_groups']:
         limit[key] = set(limit.get(key, []))
 
-    key = 'wiki_sites'
-    with ThreadPoolExecutor() as executor:
-        globals()[key] = list(executor.map(mwclient.Site, limit.get(key, [])))
+    wiki_sites = []
+    for host, pattern in limit.get('wiki_sites', {}).items():
+        site = mwclient.Site(host, do_init=False)
+        site.writing_script_pattern = re.compile(pattern)
+        wiki_sites.append(site)
+    limit.wiki_sites = wiki_sites
 
     databases = {
         'airports': ['airports_json'],

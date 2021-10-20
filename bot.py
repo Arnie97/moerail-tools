@@ -244,25 +244,46 @@ class GroupMessageHandler(AttrDict):
             reply %= '、'.join(unknown_items)
             bot.send(context, reply)
 
-    def share_filter(context) -> bool:
-        'Convert QQ share cards to plain messages.'
+        """
         match = re.fullmatch(r'''
             \[CQ:rich,
                 title   = (?P<title>[^\],]+),
                 content = (?P<body>[^\],]+)
             \]
         ''', context.raw_message, re.VERBOSE)
+        """
+
+    def share_filter(context) -> bool:
+        'Convert QQ share cards to plain messages.'
+        match = re.fullmatch(
+            r'\[CQ:json,data=(?P<body>\{[^\]]+\})\]',
+            context.raw_message)
         if not match:
             return True
 
         try:
-            body = json.loads(unescape(match.group('body')))['detail_1']
+            body = json.loads(unescape(match.group('body')))['meta']
         except:
-            reply = unescape(match.group('title'))
-        else:
-            reply = '「{title}」{desc}\n{qqdocurl}'
-            reply = api.format_map(reply, **body)
-        bot.send(context, reply)
+            pprof(time.time(), 'share', 'fail', match.group('body'))
+            return True
+
+        for card_type, card_conf in limit.card_types.items():
+            if card_type not in body:
+                continue
+            card = body[card_type]
+
+            for site, suffix in limit.get('url_trim', {}).items():
+                url = card[card_conf['url']]
+                if '://%s/' % site in url:
+                    card[card_conf['url']] = url.partition(suffix)[0]
+            if card.get('desc') == card.get('title'):
+                card.pop('desc', None)
+
+            reply = api.format(card_conf['fmt'], **card)
+            bot.send(context, reply)
+            return
+
+        return True
 
     def greeting_filter(context) -> bool:
         'Get the corresponding greeting messages for preset keywords.'

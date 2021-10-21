@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 
 import datetime
+import html
 import io
 import json
 import locale
@@ -179,7 +180,7 @@ def system_info() -> str:
 
 def match_identifiers(text: str, remove='-') -> OrderedDict:
     'Return all non-overlapping identifiers in the text, with hyphens removed.'
-    pattern = r'(?a)(?<!\w)([A-Z][-\w]+|\d{4,8}|\w+[A-Z]\w*)(?!\w)'
+    pattern = r'(?a)(?<!\w)([A-Z][-\w]+|\d{4,8}|\w+[-A-Z]\w*)(?!\w)'
     return OrderedDict(
         (i.replace(remove, ''), i)
         for i in re.findall(pattern, text)
@@ -502,36 +503,74 @@ class GroupMessageHandler(AttrDict):
 
     def flight_filter(context, i) -> bool:
         'Get flight information from FlightAware.'
-        i = context.identifiers[i]
-        if not re.match('[A-Z0-9]{2,3}[0-9]', i):
+        if not re.fullmatch(r'[A-Z\d]+[A-Z][A-Z\d]+', i):
+            return True
+        if 'flight_aware_auth' not in limit:
             return True
 
-        url = 'https://zh.flightaware.com/live/flight/' + i
-        page = requests.get(url).text
-        title_pattern = re.compile(r'<title>[A-Z0-9]+([0-9]+) \([A-Z0-9]+\1\) (.+) Flight Tracking and History - FlightAware</title>')
-        airline = title_pattern.search(page)
-        if not airline:
-            return True
-
-        details = re.search(r'var trackpollBootstrap = (.+);', page)
-        details = json.loads(details.group(1))
-        details = next(iter(details['flights'].values()))
-        details.update(
-            airline=airline.group(2),
-            callsign=details['codeShare']['airline']['callsign'],
-            aircraft=details['aircraft']['friendlyType'],
+        resp = requests.get(
+            url='http://flightxml.flightaware.com/json/FlightXML3/FlightInfoStatus',
+            params=dict(ident=i, howMany=1),
+            auth=limit.flight_aware_auth,
         )
+        flights = resp.json().get('FlightInfoStatusResult', {}).get('flights')
+        if not flights:
+            return True
+        info = flights[0]
+
+        owner = html.unescape(requests.get(
+            url='http://flightxml.flightaware.com/json/FlightXML3/TailOwner',
+            params=dict(ident=i),
+            auth=limit.flight_aware_auth,
+        ).json().get('TailOwnerResult', {}).get('owner'))
+        if owner and owner != 'Unknown Owner':
+            info['tail_owner'] = owner.replace('""', '')
+
         for airport in 'origin', 'destination':
-            d = details[airport]
-            d['name'] = airports.get(d['iata'], ' ' + d['friendlyName'])
-            explain = '{name}（{iata}，{icao}）{terminal[T{} 航站楼]}'
-            details[airport] = api.format(explain, **d)
+            a = info.get(airport)
+            if not a:
+                continue
+            a['name'] = airports.get(a['alternate_ident'], ' ' + a['airport_name'])
+            explain = '{name}（{alternate_ident}，{code}）{terminal[T{} 航站楼]}'
+            info[airport] = api.format(explain, **a)
+
+        for schedule in [
+            'filed_departure_time',
+            'actual_departure_time',
+            'filed_arrival_time',
+            'actual_arrival_time',
+        ]:
+            time_info = AttrDict(info.get(schedule, {}))
+            if not time_info:
+                continue
+            timestamp = time_info.get('epoch')
+            if not timestamp:
+                del info[schedule]
+                continue
+
+            local_time = datetime.datetime.fromtimestamp(timestamp).isoformat()
+            info[schedule] = local_time.replace('T', ' ') + ' ' + time_info.tz
+
+        filed_ete = info.get('filed_ete')
+        if filed_ete:
+            info['filed_ete'] = '%02d:%02d' % divmod(filed_ete // 60, 60)
+
         reply = '''
-            {airline} "{callsign}" {iataIdent} 航班，
+            {airline_name[{}航空公司 ]}
+            {flightnumber[{airline_iata} {} ]}航班，
             由{origin}出发，飞往{destination}。
-            {aircraft[航班由 {} 执飞。]}
+            航班由{tail_owner[ {} 所属]}
+            {full_aircrafttype[ {} 型]}飞机{tailnumber[ {} ]}执飞
+            {filed_departure_time[；预定于 {} 起飞]}
+            {filed_arrival_time[，{} 降落]}
+            {filed_ete[，飞行时间 {}]}
+            {filed_airspeed_kts[，航速 {} 节]}
+            {filed_altitude[，高度 {} 英尺]}
+            {actual_departure_time[；实际于 {} 起飞]}
+            {actual_arrival_time[，{} 降落]}。
+            {route[航路 {}。]}
         '''
-        bot.send(context, api.format(strip_lines(reply), **details))
+        bot.send(context, api.format(strip_lines(reply), **info))
 
     def shanghai_filter(context, i) -> bool:
         'Track the electric multiple units operated by CR Shanghai.'
@@ -629,7 +668,9 @@ class GroupMessageHandler(AttrDict):
                 aircraft.pop('状态')
             reply = api.format(reply.strip(), **aircraft)
             bot.send(context, strip_lines(reply))
+            context.flight_filter(i)
             return
+
         return True
 
 
@@ -837,6 +878,9 @@ def initialize(config_file: str):
     limit.titles = {v: k for k, v in limit.get('titles', {}).items()}
     for key in ['administrators', 'black_list', 'disabled_groups']:
         limit[key] = set(limit.get(key, []))
+    if 'flight_aware_auth' in limit:
+        limit.flight_aware_auth = \
+            requests.auth.HTTPBasicAuth(**limit.flight_aware_auth)
 
     wiki_sites = []
     for host, pattern in limit.get('wiki_sites', {}).items():

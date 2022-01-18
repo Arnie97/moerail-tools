@@ -497,6 +497,9 @@ class GroupMessageHandler(AttrDict):
                 non_empty_lines = filter(None, page.extract.splitlines())
                 page.extract = '\n'.join(islice(non_empty_lines, 5))
             page.extract = re.sub(r'\{\\displaystyle.+\}|(\n +)+', ' ', page.extract)
+            thumbnail_url = page.get('thumbnail', {}).get('source')
+            if thumbnail_url:
+                page.extract += '[CQ:image,file=%s]' % thumbnail_url
             bot.send(context, page.extract)
             return
         return titles
@@ -681,7 +684,9 @@ def wiki_extract(site: mwclient.Site, **kwargs) -> Iterable[Dict]:
 
     params = AttrDict(
         action='query',
-        prop='extracts',
+        prop='extracts|pageimages',
+        piprop='thumbnail',
+        pithumbsize=800,
         uselang='zh-cn',
         converttitles=True,
         redirects=True,

@@ -1,10 +1,12 @@
 #!/usr/bin/env python3
 
+import PIL.Image
 import datetime
 import html
 import io
 import json
 import locale
+import logging
 import mwclient
 import platform
 import random
@@ -15,6 +17,7 @@ import sys
 import time
 import traceback
 import warnings
+import zbar
 from collections import OrderedDict
 from concurrent.futures import ThreadPoolExecutor
 from contextlib import redirect_stdout
@@ -31,6 +34,7 @@ from tracking import solve_captcha, CAR_OR_CONTAINER_PATTERN
 bot = CQHttp('http://localhost:5700/')
 api = HyfwTracking()
 crsc = CrscTracking()
+scanner = zbar.ImageScanner()
 
 
 def unescape(text: str) -> str:
@@ -207,6 +211,7 @@ class GroupMessageHandler(AttrDict):
         unknown_items = (
             context.message_type == 'group' and
             context.share_filter() and
+            context.qr_scan_filter() and
             (context.notified or context.mentioned) and
             context.greeting_filter() and
             context.abuse_filter() and
@@ -358,6 +363,41 @@ class GroupMessageHandler(AttrDict):
             reply = random.choice(reply.split('/'))
             reply %= ' '.join(context.identifiers.values())
         bot.send(context, reply)
+        return True
+
+    def qr_scan_filter(context: AttrDict) -> bool:
+        img_file = re.compile(r'(?<=\[CQ:image,file=)[0-9A-Fa-f]{32}\.\w+(?=.+\])')
+        match = img_file.search(context.raw_message)
+        if not match:
+            return True
+
+        try:
+            img = bot.get_image(file=match.group(0), **context)
+            # if img['size'] > 10485760:
+            #     return True
+
+            # img_conf = configparser.ConfigParser()
+            # img_conf.read('../../data/image/%s.cqimg' % match.group(0))
+            # img_resp = requests.get(img_conf['image']['url']).content
+            img_resp = requests.get(img['url']).content
+
+            # with PIL.Image.open(img['file']) as img:
+            with PIL.Image.open(io.BytesIO(img_resp)) as img:
+                img = img.convert('L')
+
+        except Exception as e:
+            logging.error(e, exc_info=True, stack_info=True)
+            return True
+
+        for threshold in range(220, 20, -10):
+            scan_result = scanner.scan_pil_image(img.point(
+                lambda x: 0 if x < threshold else 0xFF
+            ).convert('1'))
+            if scan_result:
+                reply = '\n-> '.join(s.decode() for s in scan_result)
+                bot.send(context, '-> ' + url)
+                return False
+
         return True
 
     def model_filter(context, i: str) -> bool:
@@ -717,7 +757,7 @@ def tracking_handler(method: Callable, number: str) -> str:
     except (AssertionError, KeyError) as e:
         return e.args[0]
     except json.decoder.JSONDecodeError as e:
-        print(e.doc)
+        logging.error(e, exc_info=True, stack_info=True)
     else:
         known_models[info.carType.strip()] = info.carNo
         freight_train = normalize_freight_train_number(info.trainId)
@@ -936,9 +976,19 @@ def initialize(config_file: str):
             limit[filename] = filename
         load_database(name, filename, *params)
 
+    scanner_conf = [
+        (zbar.SymbolType.NONE, zbar.Config.ENABLE, 0),
+        (zbar.SymbolType.QRCODE, zbar.Config.ENABLE, 1),
+        (zbar.SymbolType.QRCODE, zbar.Config.X_DENSITY, 1),
+        (zbar.SymbolType.QRCODE, zbar.Config.Y_DENSITY, 1),
+    ]
+    for conf in scanner_conf:
+        scanner.set_config(*conf)
+
 
 if __name__ == '__main__':
     initialize(argv(1) or 'bot_config.json')
+    logging.getLogger('werkzeug').setLevel(logging.WARNING)
     warnings.filterwarnings('once')
     try:
         bot.run()

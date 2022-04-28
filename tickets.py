@@ -8,31 +8,31 @@ import re
 import requests
 from getpass import getpass
 from typing import BinaryIO, Iterable, Tuple
-from urllib.parse import unquote
+from urllib.parse import unquote, urljoin
 
 from util import module_dir, open, shell, strip_lines, AttrDict
 today = datetime.date.today().isoformat()
 
 
-class API:
+class API(requests.Session):
     'https://example.com/'
 
-    def __init__(self, params=None, headers=None):
+    def __init__(self, prebuilt_params=None, **kwargs):
         'Initialize the session.'
-        self.session = requests.Session()
-        self.params = params or {}
-        if headers:
-            self.session.headers = headers
+        super().__init__(**kwargs)
+        self.prebuilt_params = prebuilt_params or {}
 
-    def fetch(self, path, params=None, method='POST', json=True, **kwargs):
-        'Initiate an API request.'
-        url = self.__doc__ + path
-        if not isinstance(params, dict):
-            params = self.params.get(params, {})
-        query = 'params' if method == 'GET' else 'data'
-        params.update(kwargs.get(query, {}))
-        kwargs[query] = params
-        response = self.session.request(method, url, **kwargs)
+    def request(self, method, path, *args, json=True, key=None, **kwargs):
+        url = urljoin(self.__doc__, path) if path else self.__doc__
+
+        if key:
+            params = self.prebuilt_params.get(key, {})
+            kwargs_key = 'params' if method == 'GET' else 'data'
+            params.update(kwargs.get(kwargs_key, {}))
+            kwargs[kwargs_key] = params
+
+        response = super().request(method, url, *args, **kwargs)
+        response.raise_for_status()
         return AttrDict(response.json()) if json else response
 
 
@@ -56,15 +56,15 @@ class Ticket(API):
 
     def init_query_path(self):
         'Get the API endpoint, which varies between "queryA" and "queryZ".'
-        response = self.fetch('otn/leftTicket/init', json=False)
+        response = self.post('otn/leftTicket/init', json=False)
         query_path_pattern = re.compile("var CLeftTicketUrl = '(.+)';")
         self.query_path = query_path_pattern.search(response.text).group(1)
 
     def query(self, depart: str, arrive: str, date=today, student=False):
         'List trains between two stations.'
-        response = self.fetch(
+        response = self.get(
             'otn/' + self.query_path,
-            method='GET', params=AttrDict([
+            params=AttrDict([
                 ('leftTicketDTO.train_date', date),
                 ('leftTicketDTO.from_station', depart),
                 ('leftTicketDTO.to_station', arrive),
@@ -75,9 +75,9 @@ class Ticket(API):
 
     def load_captcha(self) -> io.BytesIO:
         'Fetch the CAPTCHA image.'
-        response = self.fetch(
+        response = self.get(
             'passport/captcha/captcha-image',
-            method='GET', params='captcha', json=False,
+            key='captcha', json=False,
         )
         return io.BytesIO(response.content)
 
@@ -100,18 +100,18 @@ class Ticket(API):
 
     def check_captcha(self, coordinates: str):
         'Check whether the CAPTCHA answers are correct.'
-        response = self.fetch(
+        response = self.post(
             'passport/captcha/captcha-check',
-            params='captcha', data=dict(answer=coordinates),
+            key='captcha', data=dict(answer=coordinates),
         )
         assert response.result_code == '4', response.result_message
         print(response.result_message)
 
     def login(self, **credentials):
         'Sign in to your 12306 account.'
-        response = self.fetch(
+        response = self.post(
             'passport/web/login',
-            params='otn', data=credentials,
+            key='otn', data=credentials,
         )
         assert not response.result_code, response.result_message
         print(response.result_message)
@@ -120,11 +120,11 @@ class Ticket(API):
 
     def get_auth_token(self):
         'Get the user authentication tokens in cookies.'
-        response = self.fetch('passport/web/auth/uamtk', 'otn')
+        response = self.post('passport/web/auth/uamtk', key='otn')
         assert not response.result_code, response.result_message
         print(response.result_message)
 
-        response = self.fetch('otn/uamauthclient', {'tk': response.newapptk})
+        response = self.post('otn/uamauthclient', dict(tk=response.newapptk))
         assert not response.result_code, response.result_message
         print('%s: %s' % (response.username, response.result_message))
 
@@ -137,19 +137,22 @@ class Ticket(API):
 
     def is_logged_in(self) -> bool:
         'Check whether the user is logged in.'
-        response = self.fetch('otn/login/checkUser', 'att')
+        response = self.post('otn/login/checkUser', key='att')
         return response.data['flag']
 
     def request_order(self, secret: str) -> Tuple[dict, dict]:
         'Request for order.'
         assert self.is_logged_in()
-        self.fetch(
+        self.post(
             'otn/leftTicket/submitOrderRequest', data={
                 'secretStr': unquote(secret),
                 'tour_flag': 'dc',
             }
         )
-        response = self.fetch('otn/confirmPassenger/initDc', 'att', json=False)
+        response = self.post(
+            'otn/confirmPassenger/initDc',
+            key='att', json=False,
+        )
         ticket_info_pattern = re.compile('ticketInfoForPassengerForm=(.*?);')
         ticket_info_json = ticket_info_pattern.search(response.text).group(1)
         ticket_info = json.loads(ticket_info_json.replace("'", '"'))
@@ -168,9 +171,9 @@ class Ticket(API):
     def list_passengers(self, token={}) -> dict:
         'List the available passengers in your 12306 account.'
         assert self.is_logged_in()
-        response = self.fetch(
+        response = self.post(
             'otn/confirmPassenger/getPassengerDTOs',
-            params='att', data=token,
+            key='att', data=token,
         )
         return response.data['normal_passengers']
 

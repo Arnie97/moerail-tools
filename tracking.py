@@ -125,7 +125,7 @@ class CrscTracking(Tracking):
     def track_car(self, car_no: str='5624520') -> AttrDict:
         'Track your rail shipment by car number.'
         params = {'operFlag': 'chcx', 'qo.truckcode': car_no}
-        page = self.fetch('', params, method='GET', json=False)
+        page = self.get(None, params, json=False)
         first_row = PyQuery(page.text)('center tr:nth-child(2)>td')
         assert first_row, None
         return dict(zip(
@@ -140,7 +140,7 @@ class HyfwTracking(Tracking):
     def __init__(self):
         'Initialize the session.'
         super().__init__()
-        response = self.fetch('hwzzPage.action', method='GET', json=False)
+        response = self.get('hwzzPage.action', json=False)
         pattern = '<input id="maths" .+? value="(.+?)" />'
         self.params[None] = {
             'mathsid': re.search(pattern, response.text).group(1),
@@ -150,10 +150,7 @@ class HyfwTracking(Tracking):
     def load_captcha(self) -> io.BytesIO:
         'Fetch the CAPTCHA image.'
         params = dict(math=0, update=self.params[None]['mathsid'])
-        response = self.fetch(
-            'security/jcaptcha.jpg',
-            method='GET', params=params, json=False,
-        )
+        response = self.get('security/jcaptcha.jpg', params, json=False)
         return io.BytesIO(response.content)
 
     def fill_captcha(self, answer: str):
@@ -164,7 +161,7 @@ class HyfwTracking(Tracking):
         'Send the tracking request and parse the response message.'
         # insert the namespace prefix for each key
         data = {'hwzz.' + k: v for k, v in kwargs.items()}
-        response = self.fetch('hwzz_uouii.action', data=data)
+        response = self.post('hwzz_uouii.action', data=data)
         assert response.success, response.get('message', response.get('msg'))
         return self.decipher(response.object)[0]
 

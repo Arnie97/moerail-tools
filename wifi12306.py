@@ -4,7 +4,7 @@ from datetime import date
 from itertools import chain
 from os.path import commonprefix
 from tickets import API
-from typing import Any, Iterable, Dict, List, Optional
+from typing import Any, Iterable, Dict, List, Optional, Tuple
 from util import repl, AttrDict
 
 
@@ -121,11 +121,28 @@ class Wifi12306(API):
             s['stationTrainCode'] for s in stations)
         train_no = start_station['trainNo']
         distance = end_station['distance']
-        time_span = divmod(end_station['timeSpan'] // 1000 // 60, 60)
+        time_span = self.explain_time_span(end_station['timeSpan'])
         return AttrDict(locals())
 
     @staticmethod
-    def explain_train_equipment(train_equipment: List[Dict]) -> str:
+    def explain_time_span(milliseconds: int) -> Tuple[int, int]:
+        return divmod(milliseconds // 1000 // 60, 60)
+
+    @classmethod
+    def explain_stop_time(cls, stations: List[Dict[str, Any]]) -> str:
+        for s in stations:
+            s['hours'], s['minutes'] = cls.explain_time_span(s['timeSpan'])
+        return '\n'.join(chain(
+            ['', '车次 里程 用时 编号 到站 发车 电报码 站名', '-' * 42],
+            (
+                '{stationTrainCode:5} {distance:4} {hours:02}:{minutes:02}'
+                ' {stationNo} {arriveTime} {startTime} '
+                '-{stationTelecode} {stationName}'.format_map(s)
+                for s in stations),
+        ))
+
+    @staticmethod
+    def explain_train_equipment(train_equipment: List[Dict[str, Any]]) -> str:
         depot = '{bureaName}局{depotName}（{deploydepotName}）'.format_map(
             train_equipment[0])
         return depot + '、'.join(
@@ -165,6 +182,7 @@ class Wifi12306(API):
         if train_compile_list:
             print(self.explain_train_compile_list(train_compile_list))
 
+        print(self.explain_stop_time(info.stations))
         return '> '
 
 

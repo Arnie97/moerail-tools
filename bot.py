@@ -30,10 +30,12 @@ from util import argv, open, strip_lines, AttrDict
 from trains import load_trains, parse_trains, sort_trains
 from tracking import HyfwTracking, CrscTracking
 from tracking import solve_captcha, CAR_OR_CONTAINER_PATTERN
+from wifi12306 import Wifi12306
 
 bot = CQHttp('http://localhost:5700/')
 api = HyfwTracking()
 crsc = CrscTracking()
+wifi = Wifi12306()
 scanner = zbar.ImageScanner()
 
 
@@ -420,10 +422,24 @@ class GroupMessageHandler(AttrDict):
     def train_filter(context, i: str) -> bool:
         'Gather and integrate train information from multiple sources.'
         i = context.identifiers[i]
+        try:
+            current_info = wifi.info_by_train_code(i)
+        except:
+            current_info = None
         model = get_train_model(i)
         freight_train = normalize_freight_train_number(i)
         category_description = get_train_category(freight_train or i).strip()
-        if i in trains:
+
+        if current_info:
+            current_info.train = category_description % current_info.train_code
+            reply = '''
+                {train}，从{start_station[stationName]}站始发，
+                终到{end_station[stationName]}站。
+                列车全程运行 {distance} km，
+                运行时间 {time_span[0]} 小时 {time_span[1]} 分钟。
+            '''
+            reply = strip_lines(reply).format_map(current_info)
+        elif i in trains:
             reply = category_description + '，从%s站始发，终到%s站。'
             reply %= trains[trains[i]]
         elif freight_train in cr_express:

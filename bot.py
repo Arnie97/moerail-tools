@@ -404,18 +404,38 @@ class GroupMessageHandler(AttrDict):
 
     def model_filter(context, i: str) -> bool:
         'Introduce the rolling stock.'
-        if i not in trainnets:
+        reply = ''
+        if i in trainnets:
+            url, reply = trainnets[i]
+            if ':' == url:
+                pass
+            elif ':' in url:
+                reply += '详见 %s。' % url
+            else:
+                reply += '详见 https://trainnets.com/archives/%s。' % url
+
+        while i.startswith('CR'):
+            history = requests.get('https://api.moerail.ml/emu/' + i).json()
+            if not history or history[0]['emu_no'] != i:
+                break
+
+            latest = AttrDict(history[0])
+            train_no = re.match(r'[A-Z][0-9]+', latest.train_no)
+            if train_no:
+                latest.train_no = train_no.group(0)
+            if latest.train_no in trains:
+                latest.train = '由{1}站开往{2}站的 {0} 次'.format(*trains[trains[latest.train_no]])
+            else:
+                latest.train = ' {0} 次'.format(latest.train_no)
+
+            reply += strip_lines('''
+                截至 {date}，该车正在担当{train}列车，
+                交路信息详见 https://moerail.org/#{emu_no}。
+            ''').format_map(latest)
+            break
+
+        if not reply:
             return True
-        url, reply = trainnets[i]
-        if ':' == url:
-            pass
-        elif ':' in url:
-            reply += '详见 %s。' % url
-        else:
-            reply += '详见 https://trainnets.com/archives/%s。' % url
-        if i in known_models:
-            serial = known_models[i]
-            reply += '如果你想追踪它的话，可以用 %s 这个车号。' % serial
         bot.send(context, strip_lines(reply))
         return context.train_filter(i) and False
 
@@ -425,8 +445,8 @@ class GroupMessageHandler(AttrDict):
         try:
             current_info = wifi.info_by_train_code(i)
         except:
-            current_info = None
-        model = get_train_model(i)
+            current_info = {}
+        model = get_train_model(i, current_info.get('train_no'))
         freight_train = normalize_freight_train_number(i)
         category_description = get_train_category(freight_train or i).strip()
 
@@ -435,7 +455,7 @@ class GroupMessageHandler(AttrDict):
             reply = '''
                 {train}，从{start_station[stationName]}站始发，
                 终到{end_station[stationName]}站。
-                列车全程运行 {distance} km，
+                列车全程运行 {distance:,} km，
                 运行时间 {time_span[0]} 小时 {time_span[1]} 分钟。
             '''
             reply = strip_lines(reply).format_map(current_info)
@@ -869,18 +889,73 @@ def get_cr_express(train: str) -> str:
     return api.format(strip_lines(reply), *cr_express[train])
 
 
-def get_train_model(train: str) -> str:
+def get_train_model(train: str, train_full_no: str) -> str:
     'Return the rolling stock model used for a train.'
-    if train in emu_models:
-        reply = '''
-            列车使用的动车组型号是{}
-            交路信息详见 https://moerail.ml/#{}。
+    if len(train) > 5 or train.startswith('CR'):
+        return
+
+    latest = get_train_latest_history(train)
+    reply = ''
+
+    while train_full_no:
+        train_compile_list = wifi.train_compile_list_by_train_no(train_full_no)
+        if train_compile_list:
+            reply = wifi.explain_train_compile_list(train_compile_list)
+
+        outdated = datetime.date.fromordinal(
+            datetime.date.today().toordinal() - limit.get('shelf_life', 90))
+        if latest and latest.date > outdated.isoformat():
+            break
+
+        train_equipment = wifi.train_equipment_by_train_no(train_full_no)
+        if train_equipment:
+            latest = dict(
+                date=train_equipment[0]['date'],
+                emu_no=wifi.explain_train_equipment(train_equipment),
+                train_no=train)
+            break
+
+        train_set_type = wifi.train_set_type_by_train_code(train_full_no)
+        if train_set_type:
+            latest = dict(
+                emu_no='{trainsetType}{trainsetTypeName}'.format_map(
+                    train_set_type),
+                train_no=train)
+        break
+
+    if latest:
+        explain = '''
+            {date[截至 {}，]}列车由{emu_no}担当，
+            交路信息详见 https://moerail.org/#{train_no}。
         '''
-        return strip_lines(reply).format(emu_models[train], train)
-    for model, pattern in emu_patterns.items():
-        if re.match(pattern, train):
-            reply = '列车使用的动车组型号是{}。'
-            return reply.format(model)
+        reply = api.format(strip_lines(explain), **latest) + reply
+
+    return reply
+
+
+def get_train_latest_history(train: str) -> dict:
+    response = requests.get('https://api.moerail.ml/train/,' + train)
+    if response.status_code != 200:
+        return
+    history = response.json()
+    if not history:
+        return
+
+    date = history[0]['date']
+    vehicles = []
+    for i, e in enumerate(history):
+        if e['date'] != date:
+            break
+        vehicles.append(e['emu_no'])
+        if any(model in e['emu_no'] for model in 'EJ'):
+            break
+
+    if len(vehicles) > 1:
+        vehicles.append('重联')
+    elif vehicles[0][-1].isdigit():
+        vehicles.append('')
+    vehicles.insert(0, '')
+    return AttrDict(date=date, emu_no=' '.join(vehicles), train_no=train)
 
 
 def get_train_trace(train: str) -> str:
@@ -954,15 +1029,6 @@ def initialize(config_file: str):
         'airports': ['airports_json'],
         'known_models': ['serial_json'],
         'known_traces': ['traces_json'],
-        'emu_patterns': ['emu_json', lambda f: json.load(f)[':']],
-        'emu_models': [
-            'emu_text',
-            lambda f: {
-                train_number: emu_model
-                for line in f.read().splitlines()
-                for train_number, _, emu_model in [line.partition(' ')]
-            },
-        ],
         'trainnets': [
             'trainnets_text',
             lambda f: parse_trainnets(f.read().splitlines()),

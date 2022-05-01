@@ -2,6 +2,7 @@
 
 from datetime import date
 from itertools import chain
+from operator import itemgetter
 from os.path import commonprefix
 from tickets import API
 from typing import Any, Iterable, Dict, List, Optional, Tuple
@@ -133,7 +134,8 @@ class Wifi12306(API):
         for s in stations:
             s['hours'], s['minutes'] = cls.explain_time_span(s['timeSpan'])
         return '\n'.join(chain(
-            ['', '车次 里程 用时 编号 到站 发车 电报码 站名', '-' * 42],
+            ['\n'],
+            ['车次 里程 用时 编号 到站 发车 电报码 站名', '－' * 21],
             (
                 '{stationTrainCode:5} {distance:4} {hours:02}:{minutes:02}'
                 ' {stationNo} {arriveTime} {startTime} '
@@ -143,18 +145,21 @@ class Wifi12306(API):
 
     @staticmethod
     def explain_train_equipment(train_equipment: List[Dict[str, Any]]) -> str:
-        depot = '{bureaName}局{depotName}（{deploydepotName}）'.format_map(
+        depot = '{bureaName}局（{deploydepotName}）{depotName} '.format_map(
             train_equipment[0])
-        return depot + '、'.join(
-            e['trainsetName'] for e in train_equipment)
+        vehicles = ' '.join(e['trainsetName'] for e in train_equipment)
+        if len(train_equipment) > 1:
+            vehicles += ' 重联'
+        return depot + vehicles
 
     @staticmethod
     def explain_train_compile_list(train_compile_list: List[Dict]) -> str:
         return '\n'.join(chain(
-            ['', '编号 车种 定员 附注', '-' * 20],
+            ['\n'],
+            ['编号 车种 定员 附注', '－' * 10],
             ('{coachNo:4} {coachType:4.4} {limit1:3} {commentCode:>3}'.
-                format_map(c)
-                for c in train_compile_list),
+                format_map(c) for c in sorted(
+                    train_compile_list, key=itemgetter('coachNo'))),
         ))
 
     def repl_handler(self, train_code: str) -> str:

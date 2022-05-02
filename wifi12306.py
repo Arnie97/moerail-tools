@@ -76,11 +76,25 @@ class Wifi12306(API):
         query_date: Optional[date]=None,
         big_screen: Optional[bool]=False,
     ) -> List[Dict[str, Any]]:
-        query_date = date.today()
+        if not query_date:
+            query_date = date.today()
         return self.get(
             'stoptime/queryByTrainCode',
             params=dict(
                 getBigScreen=['NO', 'YES'][big_screen],
+                trainDate=self.yyyymmdd_format(query_date),
+                trainCode=train_code))
+
+    def pre_seq_train_by_train_code(
+        self,
+        train_code: str,
+        query_date: Optional[date]=None,
+    ) -> List[Dict[str, Any]]:
+        if not query_date:
+            query_date = date.today()
+        return self.get(
+            'preSequenceTrain/getPreSequenceTrainInfo',
+            params=dict(
                 trainDate=self.yyyymmdd_format(query_date),
                 trainCode=train_code))
 
@@ -144,6 +158,17 @@ class Wifi12306(API):
         ))
 
     @staticmethod
+    def explain_pre_seq_train(pre_seq_train: List[Dict[str, Any]]) -> str:
+        return '\n'.join(chain(
+            ['\n'],
+            ['车次  里程  发时  到时  发站  到站', '－' * 18],
+            (
+                '{trainCode:5} {distance:>4} '
+                '{startTime} {endTime} {startStation} {endStation}'.format_map(s)
+                for s in pre_seq_train),
+        ))
+
+    @staticmethod
     def explain_train_equipment(train_equipment: List[Dict[str, Any]]) -> str:
         depot = '{bureaName}局（{deploydepotName}）{depotName} '.format_map(
             train_equipment[0])
@@ -171,8 +196,8 @@ class Wifi12306(API):
 
         print(
             '{train_code}（{start_station[stationName]}-'
-            '{end_station[stationName]}，'
-            '{distance} km，{time_span[0]}:{time_span[1]}）'.format_map(info))
+            '{end_station[stationName]}，{distance} km，'
+            '{time_span[0]:02}:{time_span[1]:02}）'.format_map(info))
 
         train_equipment = self.train_equipment_by_train_no(info.train_no)
         if train_equipment:
@@ -188,6 +213,11 @@ class Wifi12306(API):
             print(self.explain_train_compile_list(train_compile_list))
 
         print(self.explain_stop_time(info.stations))
+
+        pre_seq_train = self.pre_seq_train_by_train_code(train_code)
+        if pre_seq_train:
+            print(self.explain_pre_seq_train(pre_seq_train))
+
         return '> '
 
 

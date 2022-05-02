@@ -323,6 +323,7 @@ class GroupMessageHandler(AttrDict):
             return
         for pattern in [limit.self, r'^\W+', r'\s+$']:
             context.message = re.sub(pattern, '', context.message)
+        context.message = context.message.strip()
 
         if context.sender.user_id in limit.administrators:
             return True
@@ -442,16 +443,18 @@ class GroupMessageHandler(AttrDict):
     def train_filter(context, i: str) -> bool:
         'Gather and integrate train information from multiple sources.'
         i = context.identifiers[i]
-        try:
-            current_info = wifi.info_by_train_code(i)
-        except:
-            current_info = {}
-        model = get_train_model(i, current_info.get('train_no'))
         freight_train = normalize_freight_train_number(i)
-        category_description = get_train_category(freight_train or i).strip()
+        category_desc, found = get_train_category(freight_train or i)
+        current_info = model = {}
+        if found:
+            try:
+                current_info = wifi.info_by_train_code(i)
+            except:
+                pass
+            model = get_train_model(i, current_info.get('train_no'))
 
         if current_info:
-            current_info.train = category_description % current_info.train_code
+            current_info.train = category_desc.strip() % current_info.train_code
             reply = '''
                 {train}，从{start_station[stationName]}站始发，
                 终到{end_station[stationName]}站。
@@ -460,14 +463,15 @@ class GroupMessageHandler(AttrDict):
             '''
             reply = strip_lines(reply).format_map(current_info)
         elif i in trains:
-            reply = category_description + '，从%s站始发，终到%s站。'
+            reply = category_desc.strip() + '，从%s站始发，终到%s站。'
             reply %= trains[trains[i]]
         elif freight_train in cr_express:
             reply = get_cr_express(freight_train)
         elif freight_train in known_traces or model:
-            reply = '嗯，{}？'.format(category_description % i)
+            reply = '嗯，{}？'.format(category_desc.strip() % i)
         else:
             return True
+
         if model:
             reply += model
         if freight_train in known_traces:
@@ -532,10 +536,10 @@ class GroupMessageHandler(AttrDict):
         'Return the category of a train number as fallback.'
         i = context.identifiers[i]
         freight_train = normalize_freight_train_number(i)
-        category_description = get_train_category(freight_train or i).strip()
-        if len(category_description) > 6:  # if any categories found
-            category_description %= i
-            reply = '嗯，%s？我记不清了呢（' % category_description
+        category_desc, found = get_train_category(freight_train or i)
+        if found:
+            category_desc %= i
+            reply = '嗯，%s？我记不清了呢（' % category_desc.strip()
         elif i.isdigit() and len(i) == 6:
             reply = '客车不能追踪呢。'
             reply += '如果您要查询按货车办理的六位编号特种车辆，请在前面补零。'
@@ -799,8 +803,8 @@ def tracking_handler(method: Callable, number: str) -> str:
         freight_train = normalize_freight_train_number(info.trainId)
         known_traces[freight_train or info.trainId.strip()] = info.copy()
         if freight_train:
-            category_description = get_train_category(freight_train)
-            info.train = category_description % info.pop('trainId').strip()
+            category_desc, _ = get_train_category(freight_train)
+            info.train = category_desc % info.pop('trainId').strip()
         return api.explain(info)
 
 
@@ -863,7 +867,7 @@ def normalize_freight_train_number(train: str) -> str:
         return match.group(0)
 
 
-def get_train_category(train: str) -> str:
+def get_train_category(train: str) -> Tuple[str, bool]:
     'Infer the category of a train number from its range.'
     results = [' %s 次']
     for tr in train_ranges:
@@ -875,7 +879,8 @@ def get_train_category(train: str) -> str:
             results.append(tr.category)
     if len(results) == 1:
         results.append('列车')
-    return ''.join(results)
+        return ''.join(results), False
+    return ''.join(results), True
 
 
 def get_cr_express(train: str) -> str:
@@ -891,9 +896,6 @@ def get_cr_express(train: str) -> str:
 
 def get_train_model(train: str, train_full_no: str) -> str:
     'Return the rolling stock model used for a train.'
-    if len(train) > 5 or train.startswith('CR'):
-        return
-
     latest = get_train_latest_history(train)
     reply = ''
 

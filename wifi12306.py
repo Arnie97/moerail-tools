@@ -9,6 +9,27 @@ from typing import Any, Iterable, Dict, List, Optional, Tuple
 from util import repl, AttrDict
 
 
+COMMENT_MAPPING = {
+    'A': "",
+    'B': "宿",
+    'C': "广",
+    'D': "办",
+    'E': "宿广",
+    'F': "",
+    'G': "",
+    'H': "联运",
+    'I': "回转",
+    'J': "",
+    'K': "广办",
+    'L': "欠",
+    'M': "",
+    'N': "残",
+    'O': "残广",
+    'P': "残办",
+    'Q': "静",
+}
+
+
 class Wifi12306(API):
     'https://wifi.12306.cn/wifiapps/ticket/api/'
 
@@ -179,10 +200,14 @@ class Wifi12306(API):
 
     @staticmethod
     def explain_train_compile_list(train_compile_list: List[Dict]) -> str:
+        for c in train_compile_list:
+            comment = c.get('commentCode')
+            c['comment'] = ' ' + comment + ' ' + COMMENT_MAPPING.get(comment, '')
+
         return '\n'.join(chain(
             ['\n'],
             ['编号 车种 定员 附注', '－' * 10],
-            ('{coachNo:4} {coachType:4.4} {limit1:3} {commentCode:>3}'.
+            ('{coachNo:4} {coachType:4.4} {limit1:3} {comment}'.
                 format_map(c) for c in sorted(
                     train_compile_list, key=itemgetter('coachNo'))),
         ))

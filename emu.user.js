@@ -2,23 +2,22 @@
 // @name        动车组交路查询
 // @description 在 12306 订票页面上显示动车组型号与交路
 // @author      Arnie97
-// @version     2021.02.13
+// @version     2023.07.26
 // @license     MIT
 // @namespace   https://github.com/Arnie97
-// @homepageURL https://github.com/Arnie97/emu-tools
-// @match       https://www.12306.cn/kfzmpt/*
+// @homepageURL https://github.com/Arnie97/emu-tools/blob/master/emu.user.js
 // @match       https://kyfw.12306.cn/otn/leftTicket/init*
 // @match       https://kyfw.12306.cn/otn/leftTicketPrice/init
 // @match       https://kyfw.12306.cn/otn/leftTicketPrice/initPublicPrice
 // @match       https://kyfw.12306.cn/otn/czxx/init
-// @icon        https://moerail.ml/favicon.ico
-// @connect     moerail.ml
+// @icon        https://rail.re/favicon.ico
+// @connect     rail.re
 // @grant       none
 // ==/UserScript==
 
 // Patch items on the web page
 function showTrainModel(parentNode, info) {
-    var urlPath = 'https://moerail.ml/img/';
+    var urlPath = 'https://rail.re/img/';
     var img = $('<img>');
     var node = $('<a>')
         .addClass('route')
@@ -58,7 +57,7 @@ function checkPage() {
         return $(node).find('a.number').text();
     }));
 
-    var url = 'https://api.moerail.ml/train/,' + trainNumbers.join(',');
+    var url = 'https://api.rail.re/train/,' + trainNumbers.join(',');
     $.getJSON(url, function(results) {
         console.log('EMU Tools:', results.length, 'results found');
 

@@ -21,7 +21,7 @@ function showTrainModel(parentNode, info) {
     var img = $('<img>');
     var node = $('<a>')
         .addClass('route')
-        .text(info.emu_no)
+        .text(formatTrainModel(info).emu_no)
         .attr('title', info.date)
         .append(img);
 
@@ -44,6 +44,21 @@ function showTrainModel(parentNode, info) {
         img.toggle();
     });
     $(parentNode).find('.ls>span, td:nth-child(3)').contents().replaceWith(node);
+}
+
+// Add hyphens properly
+function formatTrainModel(info) {
+    [
+        /^(\w+)(\d{4})$/,
+        /^(\w+A)(A-\d{4})$/,
+        /^(\w+F)(\w+-\d{4})$/,
+    ].forEach(function(regExp) {
+        var match = info.emu_no.match(regExp);
+        if (match) {
+            info.emu_no = match[1] + "-" + match[2];
+        }
+    });
+    return info;
 }
 
 // Iterate through the items
@@ -91,10 +106,16 @@ function main() {
 }
 
 var colors = [
-    ['#F80', /CRH6/],
-    ['#C01', /AF/],
-    ['#C84', /BF/],
-    ['#080', /J/],
+    ['#D52', /MTR/],
+    ['#080', /^CR200J/],
+    ['#222', /^CRH(1|380D)/],
+    ['#222', /^CRH2(G|.-?246[0-5])/],
+    ['#E58', /^CRH6F-?A/],
+    ['#F62', /^CRH6/],
+    ['#999', /^CRH380A/],
+    ['#F10', /Z|AF-?C|^CRH3A-?A/],
+    ['#B01', /AF/],
+    ['#B85', /BF|^CRH3A/],
 ];
 
 var stylesheet = ('\
